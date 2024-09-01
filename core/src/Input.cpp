@@ -22,7 +22,7 @@ namespace IWXMVM
 
         if (IsMouseButton(key))
             return ImGui::IsMouseClicked(mouseButtonMap.at(key));
-        return ImGui::IsKeyPressed(key);
+        return ImGui::IsKeyPressed(key, false);
     }
 
     bool Input::KeyUp(ImGuiKey key)

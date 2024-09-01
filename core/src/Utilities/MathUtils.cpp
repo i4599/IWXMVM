@@ -21,10 +21,8 @@ namespace IWXMVM::MathUtils
 
     std::optional<ImVec2> WorldToScreenPoint(glm::vec3 point, Components::Camera& camera)
     {
-        auto& gameView = UI::UIManager::Get().GetUIComponent(UI::Component::GameView);
-        auto viewport = glm::vec4(gameView->GetPosition().x, gameView->GetPosition().y,
-                                  gameView->GetPosition().x + gameView->GetSize().x,
-                                  gameView->GetPosition().y + gameView->GetSize().y);
+        auto viewport =
+            glm::vec4(0.0f, 0.0f, 0.0f + UI::Manager::GetWindowSizeX(), 0.0f + UI::Manager::GetWindowSizeY());
 
         auto lookat =
             glm::lookAtLH(camera.GetPosition(), camera.GetPosition() + camera.GetForwardVector(), glm::vector3::up);

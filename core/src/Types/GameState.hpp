@@ -6,7 +6,8 @@ namespace IWXMVM::Types
     {
         MainMenu,
         InGame,
-        InDemo
+        InDemo,
+        LoadingDemo
     };
 
     static inline std::string_view ToString(GameState state)
@@ -19,6 +20,8 @@ namespace IWXMVM::Types
                 return "Playing Demo";
             case GameState::InGame:
                 return "In Game";
+            case GameState::LoadingDemo:
+                return "Loading Demo";
             default:
                 return "Unknown Game";
         }

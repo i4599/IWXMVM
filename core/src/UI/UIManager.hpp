@@ -3,23 +3,6 @@
 
 #include "UIComponent.hpp"
 
-#include "Components/Background.hpp"
-#include "Components/CaptureMenu.hpp"
-#include "Components/ControlBar.hpp"
-#include "Components/DebugPanel.hpp"
-#include "Components/DemoLoader.hpp"
-#include "Components/GameView.hpp"
-#include "Components/MenuBar.hpp"
-#include "Components/PrimaryTabs.hpp"
-#include "Components/VisualsMenu.hpp"
-#include "Components/CameraMenu.hpp"
-#include "Components/KeyframeEditor.hpp"
-#include "Components/ControlsMenu.hpp"
-#include "Components/Preferences.hpp"
-#include "Components/PlayerAnimationUI.hpp"
-#include "Components/Readme.hpp"
-#include "Components/Credits.hpp"
-
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 namespace IWXMVM::UI
@@ -49,108 +32,35 @@ namespace IWXMVM::UI
         };
     }
 
-    class UIManager
+    namespace Manager
     {
-       public:
-        static UIManager& Get()
-        {
-            static UIManager instance;
-            return instance;
-        }
+        void Initialize(IDirect3DDevice9* device, HWND hwnd, ImVec2 size);
+        void Shutdown();
+        void Frame();
 
-        UIManager(UIManager const&) = delete;
-        void operator=(UIManager const&) = delete;
+        bool IsInitialized() noexcept;
+        bool IsBlurInitialized() noexcept;
+        bool IsHidden() noexcept;
 
-        void Initialize(IDirect3DDevice9* device, HWND hwnd = nullptr);
-        void ShutdownImGui();
-        void RunImGuiFrame();
+        ImVec2 GetWindowPos() noexcept;
+        ImVec2 GetWindowSize() noexcept;
+        float GetWindowSizeX() noexcept;
+        float GetWindowSizeY() noexcept;
 
-        bool IsControllableCameraModeSelected();
+        ImFont* GetFont() noexcept;
+        float GetFontSize() noexcept;
 
-        ImVec2 GetWindowSize(HWND hwnd);
-        ImVec2 GetWindowPosition(HWND hwnd);
+        ImFont* GetBoldFont() noexcept;
+        float GetBoldFontSize() noexcept;
 
-        bool IsInitialized() const
-        {
-            return isInitialized;
-        }
+        // Same as main font but 3/4 of original size
+        ImFont* GetTQFont() noexcept;
+        float GetTQFontSize() noexcept;
 
-        WNDPROC GetOriginalGameWndProc() const
-        {
-            return originalGameWndProc;
-        }
+        // Same as main font but 1/2 of original size
+        ImFont* GetHFont() noexcept;
+        float GetHFontSize() noexcept;
 
-        std::unique_ptr<UIComponent> const& GetUIComponent(Component::Component component) const
-        {
-            return uiComponents[component];
-        }
-
-        #pragma warning (disable: 4172)
-        template <typename T>
-        T* const& GetUIComponent(Component::Component component) const
-        {
-            return dynamic_cast<T*>(uiComponents[component].get());
-        }
-
-        std::array<std::unique_ptr<UIComponent>, Component::Count> const& GetUIComponents() const
-        {
-            return uiComponents;
-        }
-
-        void SelectTab(Tab tab)
-        {
-            selectedTab = tab;
-        }
-
-        Tab GetSelectedTab() const
-        {
-            return selectedTab;
-        }
-
-        void ToggleOverlay();
-
-        bool IsOverlayHidden()
-        {
-            return hideOverlay;
-        }
-
-        void ToggleImGuiDemo()
-        {
-            showImGuiDemo = !showImGuiDemo;
-        }
-
-        void ToggleDebugPanel()
-        {
-            showDebugPanel = !showDebugPanel;
-        }
-
-        ImFont* GetBoldFont()
-		{
-			return ImGui::GetIO().Fonts->Fonts[1];
-		}
-
-       private:
-        UIManager()
-        {
-        }
-
-        std::array<std::unique_ptr<UIComponent>, Component::Count> uiComponents = {
-            std::make_unique<Background>(),  std::make_unique<MenuBar>(),     std::make_unique<GameView>(),
-            std::make_unique<PrimaryTabs>(), std::make_unique<DemoLoader>(),  std::make_unique<CameraMenu>(),
-            std::make_unique<VisualsMenu>(), std::make_unique<CaptureMenu>(), std::make_unique<ControlBar>(),
-            std::make_unique<DebugPanel>(),  std::make_unique<KeyframeEditor>(), std::make_unique<ControlsMenu>(),
-            std::make_unique<Preferences>(), std::make_unique<PlayerAnimation>(), std::make_unique<Readme>(),
-            std::make_unique<Credits>(),
-        };
-
-        Tab selectedTab = Tab::Demos;
-        bool isInitialized = false;
-        bool uiComponentsInitialized = false;
-
-        bool hideOverlay = false;
-        bool showImGuiDemo = false;
-        bool showDebugPanel = false;
-
-        WNDPROC originalGameWndProc = nullptr;
+        float GetIconsFontSize() noexcept;
     };
 }  // namespace IWXMVM::UI

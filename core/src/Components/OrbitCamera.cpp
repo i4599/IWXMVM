@@ -17,7 +17,7 @@ namespace IWXMVM::Components
 
     void OrbitCamera::Update()
     {
-        if (!UI::UIManager::Get().GetUIComponent(UI::Component::GameView)->HasFocus())
+        if (!UI::Manager::IsHidden())
             return;
 
         auto& cameraPosition = this->GetPosition();

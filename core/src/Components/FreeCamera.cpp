@@ -21,41 +21,11 @@ namespace IWXMVM::Components
 
     void FreeCamera::Initialize()
     {
-        Events::RegisterListener(EventType::OnRenderGameView, [&]() {
-
-            if (CameraManager::Get().GetActiveCamera()->GetMode() != Camera::Mode::Free)
-                return;
-
-            auto& gameView = UI::UIManager::Get().GetUIComponent(UI::Component::GameView);
-
-            if (fovDisplayTimer > 0)
-            {
-                auto label = std::format(ICON_FA_VIDEO " {0:.0f} ", this->GetFov());
-                auto pos = gameView->GetPosition() + gameView->GetSize() -
-                           ImVec2(ImGui::GetFontSize() * 5, ImGui::GetFontSize() * 2) -
-                           ImGui::CalcTextSize(label.c_str());
-                ImGui::GetWindowDrawList()->AddText(pos,
-                                                    ImColor(255, 255, 255, GetAlphaForTimer(fovDisplayTimer)),
-                                                    label.c_str());
-                fovDisplayTimer -= Input::GetDeltaTime();
-            }
-
-            if (rotationDisplayTimer > 0)
-            {
-                auto label = std::format(ICON_FA_ARROW_ROTATE_RIGHT " {0:.0f} ", this->GetRotation()[2]);
-                auto pos = gameView->GetPosition() +
-                           ImVec2(ImGui::GetFontSize() * 5, gameView->GetSize().y - ImGui::GetFontSize() * 2) - 
-                           ImVec2(0, ImGui::CalcTextSize(label.c_str()).y);
-                ImGui::GetWindowDrawList()->AddText(pos, ImColor(255, 255, 255, GetAlphaForTimer(rotationDisplayTimer)),
-                                                    label.c_str());
-                rotationDisplayTimer -= Input::GetDeltaTime();
-            }
-        });
     }
 
     void FreeCamera::Update()
     {
-        if (!UI::UIManager::Get().GetUIComponent(UI::Component::GameView)->HasFocus())
+        if (!UI::Manager::IsHidden())
             return;
 
         HandleFreecamInput(this->position, this->rotation, this->fov, this->GetForwardVector(), this->GetRightVector());
@@ -100,8 +70,19 @@ namespace IWXMVM::Components
 
         if (Input::KeyHeld(ImGuiKey_LeftAlt))
         {
-            rotation[2] += Input::GetScrollDelta();
-            rotationDisplayTimer = PROPERTY_DISPLAY_TIME;
+            static float scrollDeltaRot = 0.0f;
+            scrollDeltaRot -= Input::GetScrollDelta();
+
+            if (scrollDeltaRot < SCROLL_LOWER_BOUNDARY || scrollDeltaRot > SCROLL_UPPER_BOUNDARY)
+            {
+                rotation[2] += scrollDeltaRot * Input::GetDeltaTime() * 32.0f;
+                scrollDeltaRot *= SMOOTHING_FACTOR;
+                rotationDisplayTimer = PROPERTY_DISPLAY_TIME;
+            }
+            else if (scrollDeltaRot != 0.0)
+            {
+                scrollDeltaRot = 0.0;
+            }
         }
         else
         {

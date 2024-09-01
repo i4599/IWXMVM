@@ -3,10 +3,9 @@
 
 namespace IWXMVM::UI
 {
-    namespace VisualsMenu
+    namespace Tabs
     {
+        void Add(const char* icon, bool* show) noexcept;
         void Render();
-
-        bool* GetShowPtr() noexcept;
     }  // namespace Tabs
 }  // namespace IWXMVM::UI

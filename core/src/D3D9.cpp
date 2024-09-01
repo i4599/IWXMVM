@@ -66,6 +66,23 @@ namespace IWXMVM::D3D9
         return false;
     }
 
+    ImVec2 GetBackBufferSize(IDirect3DDevice9* pDevice)
+    {
+        IDirect3DSurface9* backBuffer = nullptr;
+        HRESULT hr = pDevice->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &backBuffer);
+        if (SUCCEEDED(hr))
+        {
+            D3DSURFACE_DESC backBufferDesc = {};
+            backBuffer->GetDesc(&backBufferDesc);
+            return {static_cast<float>(backBufferDesc.Width), static_cast<float>(backBufferDesc.Height)};
+        }
+        else
+        {
+            LOG_ERROR("Failed to retrieve backbuffer when querying size");
+            return {};
+        }
+    }
+
     HRESULT __stdcall CreateDevice_Hook(IDirect3D9* pInterface, UINT Adapter, D3DDEVTYPE DeviceType, HWND hFocusWindow,
                                         DWORD BehaviorFlags, D3DPRESENT_PARAMETERS* pPresentationParameters,
                                         IDirect3DDevice9** ppReturnedDeviceInterface)
@@ -73,7 +90,7 @@ namespace IWXMVM::D3D9
         LOG_DEBUG("CreateDevice called with hwnd {0:x}", (std::uintptr_t)pPresentationParameters->hDeviceWindow);
 
         GFX::GraphicsManager::Get().Uninitialize();
-        UI::UIManager::Get().ShutdownImGui();
+        UI::Manager::Shutdown();
 
         HRESULT hr = CreateDevice(pInterface, Adapter, DeviceType, hFocusWindow, BehaviorFlags, pPresentationParameters,
                                   ppReturnedDeviceInterface);
@@ -84,7 +101,7 @@ namespace IWXMVM::D3D9
 
         device = *ppReturnedDeviceInterface;
 
-        UI::UIManager::Get().Initialize(device, pPresentationParameters->hDeviceWindow);
+        UI::Manager::Initialize(device, pPresentationParameters->hDeviceWindow, GetBackBufferSize(device));
         GFX::GraphicsManager::Get().Initialize();
 
         return hr;
@@ -105,10 +122,10 @@ namespace IWXMVM::D3D9
             return EndScene(pDevice);
         }
 
-        if (!UI::UIManager::Get().IsInitialized())
+        if (!UI::Manager::IsInitialized())
         {
             device = pDevice;
-            UI::UIManager::Get().Initialize(pDevice);
+            UI::Manager::Initialize(pDevice, FindWindowHandle(), GetBackBufferSize(device));
             GFX::GraphicsManager::Get().Initialize();
         }
 
@@ -119,7 +136,7 @@ namespace IWXMVM::D3D9
 
         if (!reshadeEndSceneAddress.has_value())
         {
-            UI::UIManager::Get().RunImGuiFrame();
+            UI::Manager::Frame();
         }
 
         return EndScene(pDevice);
@@ -134,16 +151,12 @@ namespace IWXMVM::D3D9
         }
         ++reshadeEndSceneCallCount;
 
-        UI::UIManager::Get().RunImGuiFrame();
+        UI::Manager::Frame();
         return ReshadeOriginalEndScene(pDevice);
     }
 
     HRESULT __stdcall Reset_Hook(IDirect3DDevice9* pDevice, D3DPRESENT_PARAMETERS* pPresentationParameters)
     {
-        for (const auto& component : UI::UIManager::Get().GetUIComponents())
-        {
-            component->Release();
-        }
 
         GFX::GraphicsManager::Get().Uninitialize();
 
@@ -153,7 +166,7 @@ namespace IWXMVM::D3D9
 
         // do we need to re-initialize the UI components?
 
-        if (UI::UIManager::Get().IsInitialized())
+        if (UI::Manager::IsInitialized())
         {
             GFX::GraphicsManager::Get().Initialize();
         }

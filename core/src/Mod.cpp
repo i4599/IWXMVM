@@ -62,7 +62,8 @@ namespace IWXMVM
 
             LOG_INFO("Initialized IWXMVM!");
 
-            while (!ejectRequested.load())
+            //while (!ejectRequested.load())
+            while (!(GetAsyncKeyState(VK_F4) & 1))
                 std::this_thread::sleep_for(std::chrono::milliseconds(1));
 
             HookManager::Unhook();
@@ -72,8 +73,8 @@ namespace IWXMVM
             // this is done for d3d9 reset, d3d9 create device, and here below
             GFX::GraphicsManager::Get().Uninitialize();
             LOG_DEBUG("Released UI and graphic resources");
-            UI::UIManager::Get().ShutdownImGui();
-            LOG_DEBUG("ImGui successfully shutdown");
+            UI::Manager::Shutdown();
+            LOG_DEBUG("UI successfully shutdown");
 
             WindowsConsole::Close();
             ::FreeLibraryAndExitThread(GetCurrentModule(), 0);

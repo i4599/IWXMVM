@@ -38,7 +38,7 @@ namespace IWXMVM::Components
 
     void BoneCamera::HandleInput(const Types::BoneData& boneData)
     {
-        if (!UI::UIManager::Get().GetUIComponent(UI::Component::GameView)->HasFocus())
+        if (!UI::Manager::IsHidden())
             return;
         auto worldSpacePosition = boneData.position + boneData.rotation * positionOffset;
 

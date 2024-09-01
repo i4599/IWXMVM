@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -140,18 +140,15 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="src\Resources.cpp" />
-    <ClCompile Include="src\UI\Components\Background.cpp" />
-    <ClCompile Include="src\UI\Components\CameraMenu.cpp" />
-    <ClCompile Include="src\UI\Components\CaptureMenu.cpp" />
+    <ClCompile Include="src\UI\Animations.cpp" />
+    <ClCompile Include="src\UI\Blur.cpp" />
     <ClCompile Include="src\UI\Components\ControlBar.cpp" />
-    <ClCompile Include="src\UI\Components\ControlsMenu.cpp" />
-    <ClCompile Include="src\UI\Components\Credits.cpp" />
+    <ClCompile Include="src\UI\Components\DemoLoader.cpp" />
     <ClCompile Include="src\UI\Components\KeyframeEditor.cpp" />
-    <ClCompile Include="src\UI\Components\PlayerAnimationUI.cpp" />
-    <ClCompile Include="src\UI\Components\Preferences.cpp" />
-    <ClCompile Include="src\UI\Components\Readme.cpp" />
+    <ClCompile Include="src\UI\Components\Notifications.cpp" />
+    <ClCompile Include="src\UI\Components\Tabs.cpp" />
+    <ClCompile Include="src\UI\Components\VisualsMenu.cpp" />
     <ClCompile Include="src\UI\ImGuiEx\ImGuiExtensions.cpp" />
-    <ClCompile Include="src\UI\Components\DebugPanel.cpp" />
     <ClCompile Include="src\Events.cpp" />
     <ClCompile Include="src\Logger.cpp" />
     <ClCompile Include="src\Mod.cpp" />
@@ -159,11 +156,6 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="src\UI\Components\DemoLoader.cpp" />
-    <ClCompile Include="src\UI\Components\GameView.cpp" />
-    <ClCompile Include="src\UI\Components\MenuBar.cpp" />
-    <ClCompile Include="src\UI\Components\PrimaryTabs.cpp" />
-    <ClCompile Include="src\UI\Components\VisualsMenu.cpp" />
     <ClCompile Include="src\UI\ImGuiEx\KeyframeableControls.cpp" />
     <ClCompile Include="src\UI\UIImage.cpp" />
     <ClCompile Include="src\UI\UIManager.cpp" />
@@ -207,13 +199,13 @@
     <ClInclude Include="src\Types\PlaybackData.hpp" />
     <ClInclude Include="src\Types\Sun.hpp" />
     <ClInclude Include="src\Types\Vertex.hpp" />
-    <ClInclude Include="src\UI\Components\CameraMenu.hpp" />
-    <ClInclude Include="src\UI\Components\ControlsMenu.hpp" />
-    <ClInclude Include="src\UI\Components\Credits.hpp" />
+    <ClInclude Include="src\UI\Animations.hpp" />
+    <ClInclude Include="src\UI\Blur.hpp" />
+    <ClInclude Include="src\UI\Components\ControlBar.hpp" />
+    <ClInclude Include="src\UI\Components\DemoLoader.hpp" />
     <ClInclude Include="src\UI\Components\KeyframeEditor.hpp" />
-    <ClInclude Include="src\UI\Components\PlayerAnimationUI.hpp" />
-    <ClInclude Include="src\UI\Components\Preferences.hpp" />
-    <ClInclude Include="src\UI\Components\Readme.hpp" />
+    <ClInclude Include="src\UI\Components\Notifications.hpp" />
+    <ClInclude Include="src\UI\Components\Tabs.hpp" />
     <ClInclude Include="src\UI\Components\VisualsMenu.hpp" />
     <ClInclude Include="src\UI\ImGuiEx\KeyframeableControls.hpp" />
     <ClInclude Include="src\Utilities\GLMExtensions.hpp" />
@@ -225,15 +217,7 @@
     <ClInclude Include="src\Components\Camera.hpp" />
     <ClInclude Include="src\D3D9.hpp" />
     <ClInclude Include="src\Resources.hpp" />
-    <ClInclude Include="src\UI\Components\Background.hpp" />
-    <ClInclude Include="src\UI\Components\CaptureMenu.hpp" />
-    <ClInclude Include="src\UI\Components\ControlBar.hpp" />
     <ClInclude Include="src\UI\ImGuiEx\ImGuiExtensions.hpp" />
-    <ClInclude Include="src\UI\Components\DebugPanel.hpp" />
-    <ClInclude Include="src\UI\Components\DemoLoader.hpp" />
-    <ClInclude Include="src\UI\Components\GameView.hpp" />
-    <ClInclude Include="src\UI\Components\MenuBar.hpp" />
-    <ClInclude Include="src\UI\Components\PrimaryTabs.hpp" />
     <ClInclude Include="src\UI\UIComponent.hpp" />
     <ClInclude Include="src\UI\UIImage.hpp" />
     <ClInclude Include="src\Utilities\HookManager.hpp" />

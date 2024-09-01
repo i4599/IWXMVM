@@ -1,30 +1,320 @@
 #include "StdInclude.hpp"
 #include "UIManager.hpp"
 
+#include "Components/CameraManager.hpp"
+#include "Components/Playback.hpp"
+#include "Configuration/InputConfiguration.hpp"
 #include "UIComponent.hpp"
 #include "Utilities/HookManager.hpp"
 #include "Mod.hpp"
 #include "Events.hpp"
 #include "Resources.hpp"
 #include "Input.hpp"
-#include "Components/CameraManager.hpp"
 #include "Utilities/MathUtils.hpp"
+#include "UI/Animations.hpp"
+#include "UI/Blur.hpp"
+#include "UI/Components/ControlBar.hpp"
+#include "UI/Components/DemoLoader.hpp"
+#include "UI/Components/KeyframeEditor.hpp"
+#include "UI/Components/Notifications.hpp"
+#include "UI/Components/Tabs.hpp"
+#include "UI/Components/VisualsMenu.hpp"
 #include "UI/TaskbarProgress.hpp"
+
+#include "imgui_internal.h"
 
 namespace IWXMVM::UI
 {
-    void UIManager::ShutdownImGui()
+    INCBIN_EXTERN(NOTOSANS_FONT);
+    INCBIN_EXTERN(NOTOSANS_BOLD_FONT);
+    INCBIN_EXTERN(FA_ICONS_FONT);
+
+    static bool isInitialized = false;
+    static bool blurInitialized = false;
+    static bool hideOverlay = false;
+    static bool overlayHiddenThisFrame = false;
+    static ImVec2 windowSize;
+    static ImVec2 simulatedMouse;
+    static ImVec2 mousePosWhenHid;
+    static ImVec2 mouseDelta;
+
+    static ImFont* font;
+    static float fontSize;
+
+    // Sizes of these are a multiple of fontSize and can be accessed through the getter functions
+    static ImFont* boldFont;
+    static ImFont* tqFont;
+    static ImFont* hFont;
+
+    static WNDPROC originalGameWndProc;
+
+    static Animation opacityAnim;
+
+    static void SetGameCursorVisibility(bool show)
     {
-        LOG_DEBUG("Shutting down ImGui");
+        if (!show)
+        {
+            Mod::GetGameInterface()->SetMouseMode(Types::MouseMode::Capture);
+        }
+        else
+        {
+            Mod::GetGameInterface()->SetMouseMode(Types::MouseMode::Passthrough);
+        }
+    }
+
+    static HRESULT ImGuiWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
+    {
+        WPARAM newLParam = lParam;
+
+        if (hideOverlay && Mod::GetGameInterface()->GetGameState() == Types::GameState::InDemo && GetFocus() == hWnd)
+        {
+            switch (uMsg)
+            {
+                case WM_MOUSEMOVE:
+                case WM_NCMOUSEMOVE:
+                {
+                    ImVec2 mousePos = {static_cast<float>(GET_X_LPARAM(lParam)), static_cast<float>(GET_Y_LPARAM(lParam))};
+                    ImVec2 middle = {windowSize.x / 2.0f, windowSize.y / 2.0f};
+
+                    middle.y -= 12.0f;
+
+                    if (!overlayHiddenThisFrame)
+                    {
+                        mouseDelta.x = mousePos.x - middle.x;
+                        mouseDelta.y = mousePos.y - middle.y;
+                    }
+                    else
+                    {
+                        mouseDelta = {};
+                    }
+
+                    simulatedMouse.x += mouseDelta.x * 0.5f;
+                    simulatedMouse.y += mouseDelta.y * 0.5f;
+
+                    newLParam = MAKELPARAM(static_cast<LONG>(simulatedMouse.x), static_cast<LONG>(simulatedMouse.y));
+                }
+            }
+        }
+
+        if (ImGui_ImplWin32_WndProcHandler(hWnd, uMsg, wParam, newLParam))
+        {
+            return 1L;
+        }
+
+        if (!hideOverlay)
+        {
+            ShowCursor(true);
+
+            if (ImGui::GetIO().WantCaptureKeyboard)
+            {
+                switch (uMsg)
+                {
+                    case WM_CHAR:
+                    case WM_HOTKEY:
+                    case WM_KEYDOWN:
+                    case WM_KEYUP:
+                    case WM_SYSKEYDOWN:
+                    case WM_SYSKEYUP:
+                        return 1L;
+                }
+            }
+        }
+
+        return CallWindowProc(originalGameWndProc, hWnd, uMsg, wParam, lParam);
+    }
+
+    static float OpacityInterp(float a, float b, float t)
+    {
+        return std::lerp(a, b, t);
+    }
+
+    static void SetImGuiStyle()
+    {
+        ImGuiStyle& style = ImGui::GetStyle();
+
+        style.Alpha = 1.0f;
+        style.DisabledAlpha = 1.0f;
+        style.WindowPadding = {};
+        style.WindowRounding = 5.0f;
+        style.WindowBorderSize = 2.0f;
+        style.ChildRounding = 0.0f;
+        style.ChildBorderSize = 0.0f;
+        style.PopupRounding = 0.0f;
+        style.PopupBorderSize = 0.0f;
+        style.FramePadding = {};
+        style.FrameRounding = 0.0f;
+        style.FrameBorderSize = 0.0f;
+        style.ItemSpacing = {};
+        style.ItemInnerSpacing = {};
+        style.CellPadding = {};
+        style.IndentSpacing = 0.0f;
+        style.ColumnsMinSpacing = 0.0f;
+        style.ScrollbarSize = 12.0f;
+        style.ScrollbarRounding = 0.0f;
+        style.GrabMinSize = 12.0f;
+        style.GrabRounding = 0.0f;
+        style.TabRounding = 0.0f;
+        style.DisplayWindowPadding = {100.0f, 100.0f};
+
+        style.Colors[ImGuiCol_Text] = {1.00f, 1.00f, 1.00f, 1.00f};
+        style.Colors[ImGuiCol_TextDisabled] = {0.50f, 0.50f, 0.50f, 1.00f};
+        style.Colors[ImGuiCol_WindowBg] = {0.04f, 0.04f, 0.04f, 1.00f};
+        style.Colors[ImGuiCol_ChildBg] = {0.00f, 0.00f, 0.00f, 0.00f};
+        style.Colors[ImGuiCol_PopupBg] = {0.19f, 0.19f, 0.19f, 0.92f};
+        style.Colors[ImGuiCol_Border] = {0.19f, 0.19f, 0.19f, 0.29f};
+        style.Colors[ImGuiCol_BorderShadow] = {0.00f, 0.00f, 0.00f, 0.24f};
+        style.Colors[ImGuiCol_FrameBg] = {0.12f, 0.12f, 0.12f, 1.00f};
+        style.Colors[ImGuiCol_FrameBgHovered] = {0.19f, 0.19f, 0.19f, 1.00f};
+        style.Colors[ImGuiCol_FrameBgActive] = {0.20f, 0.22f, 0.23f, 1.00f};
+        style.Colors[ImGuiCol_TitleBg] = {0.00f, 0.00f, 0.00f, 1.00f};
+        style.Colors[ImGuiCol_TitleBgActive] = {0.1f, 0.1f, 0.1f, 1.00f};
+        style.Colors[ImGuiCol_TitleBgCollapsed] = {0.00f, 0.00f, 0.00f, 1.00f};
+        style.Colors[ImGuiCol_MenuBarBg] = {0.14f, 0.14f, 0.14f, 1.00f};
+        style.Colors[ImGuiCol_ScrollbarBg] = {0.05f, 0.05f, 0.05f, 0.54f};
+        style.Colors[ImGuiCol_ScrollbarGrab] = {0.34f, 0.34f, 0.34f, 0.54f};
+        style.Colors[ImGuiCol_ScrollbarGrabHovered] = {0.40f, 0.40f, 0.40f, 0.54f};
+        style.Colors[ImGuiCol_ScrollbarGrabActive] = {0.56f, 0.56f, 0.56f, 0.54f};
+        style.Colors[ImGuiCol_CheckMark] = {0.33f, 0.67f, 0.86f, 1.00f};
+        style.Colors[ImGuiCol_SliderGrab] = {0.34f, 0.34f, 0.34f, 0.54f};
+        style.Colors[ImGuiCol_SliderGrabActive] = {0.56f, 0.56f, 0.56f, 0.54f};
+        style.Colors[ImGuiCol_Button] = {0.05f, 0.05f, 0.05f, 0.54f};
+        style.Colors[ImGuiCol_ButtonHovered] = {0.19f, 0.19f, 0.19f, 0.54f};
+        style.Colors[ImGuiCol_ButtonActive] = {0.20f, 0.22f, 0.23f, 1.00f};
+        style.Colors[ImGuiCol_Header] = {0.00f, 0.00f, 0.00f, 1.00f};
+        style.Colors[ImGuiCol_HeaderHovered] = {0.3f, 0.3f, 0.3f, 1.00f};
+        style.Colors[ImGuiCol_HeaderActive] = {0.20f, 0.22f, 0.23f, 0.33f};
+        style.Colors[ImGuiCol_Separator] = {0.28f, 0.28f, 0.28f, 0.29f};
+        style.Colors[ImGuiCol_SeparatorHovered] = {0.8f, 0.8f, 0.8f, 0.29f};
+        style.Colors[ImGuiCol_SeparatorActive] = {0.40f, 0.44f, 0.47f, 1.00f};
+        style.Colors[ImGuiCol_ResizeGrip] = {0.28f, 0.28f, 0.28f, 0.29f};
+        style.Colors[ImGuiCol_ResizeGripHovered] = {0.44f, 0.44f, 0.44f, 0.29f};
+        style.Colors[ImGuiCol_ResizeGripActive] = {0.40f, 0.44f, 0.47f, 1.00f};
+        style.Colors[ImGuiCol_Tab] = {0.00f, 0.00f, 0.00f, 0.52f};
+        style.Colors[ImGuiCol_TabHovered] = {0.14f, 0.14f, 0.14f, 1.00f};
+        style.Colors[ImGuiCol_TabActive] = {0.20f, 0.20f, 0.20f, 0.36f};
+        style.Colors[ImGuiCol_TabUnfocused] = {0.00f, 0.00f, 0.00f, 0.52f};
+        style.Colors[ImGuiCol_TabUnfocusedActive] = {0.14f, 0.14f, 0.14f, 1.00f};
+        style.Colors[ImGuiCol_PlotLines] = {1.00f, 0.00f, 0.00f, 1.00f};
+        style.Colors[ImGuiCol_PlotLinesHovered] = {1.00f, 0.00f, 0.00f, 1.00f};
+        style.Colors[ImGuiCol_PlotHistogram] = {1.00f, 0.00f, 0.00f, 1.00f};
+        style.Colors[ImGuiCol_PlotHistogramHovered] = {1.00f, 0.00f, 0.00f, 1.00f};
+        style.Colors[ImGuiCol_TableHeaderBg] = {0.00f, 0.00f, 0.00f, 0.52f};
+        style.Colors[ImGuiCol_TableBorderStrong] = {0.00f, 0.00f, 0.00f, 0.52f};
+        style.Colors[ImGuiCol_TableBorderLight] = {0.28f, 0.28f, 0.28f, 0.29f};
+        style.Colors[ImGuiCol_TableRowBg] = {0.00f, 0.00f, 0.00f, 0.00f};
+        style.Colors[ImGuiCol_TableRowBgAlt] = {1.00f, 1.00f, 1.00f, 0.06f};
+        style.Colors[ImGuiCol_TextSelectedBg] = {0.20f, 0.22f, 0.23f, 1.00f};
+        style.Colors[ImGuiCol_DragDropTarget] = {0.33f, 0.67f, 0.86f, 1.00f};
+        style.Colors[ImGuiCol_NavHighlight] = {1.00f, 0.00f, 0.00f, 1.00f};
+        style.Colors[ImGuiCol_NavWindowingHighlight] = {1.00f, 0.00f, 0.00f, 0.70f};
+        style.Colors[ImGuiCol_NavWindowingDimBg] = {1.00f, 0.00f, 0.00f, 0.20f};
+        style.Colors[ImGuiCol_ModalWindowDimBg] = {1.00f, 0.00f, 0.00f, 0.35f};
+    }
+
+    void Manager::Initialize(IDirect3DDevice9* device, HWND hwnd, ImVec2 size)
+    {
+        windowSize = size;
+        fontSize = std::floor(windowSize.y / 45.0f);
+
+        try
+        {
+            LOG_DEBUG("Initializing UI Manager...");
+
+            LOG_DEBUG("Creating ImGui context");
+            IMGUI_CHECKVERSION();
+            ImGui::CreateContext();
+
+            ImGui::StyleColorsDark();
+            SetImGuiStyle();
+
+            LOG_DEBUG("Initializing ImGui_ImplWin32 with HWND {0:x}", (std::uintptr_t)hwnd);
+            ImGui_ImplWin32_Init(hwnd);
+
+            LOG_DEBUG("Initializing ImGui_ImplDX9 with D3D9 Device {0:x}", (std::uintptr_t)device);
+            ImGui_ImplDX9_Init(device);
+
+            // TODO: byte size is game dependent
+            LOG_DEBUG("Hooking WndProc at {0:x}", Mod::GetGameInterface()->GetWndProc());
+            originalGameWndProc = (WNDPROC)SetWindowLongPtr(hwnd, GWLP_WNDPROC, (std::uintptr_t)ImGuiWndProc);
+
+            ImGuiIO& io = ImGui::GetIO();
+            io.IniFilename = NULL;
+            io.Fonts->ClearFonts();
+            io.ConfigInputTrickleEventQueue = false;
+
+            auto RegisterFont = [&](const char* name, const uint8_t* data, size_t size, float fontSize) -> ImFont* {
+                ImFontConfig fontConfig;
+                fontConfig.FontDataOwnedByAtlas = false;
+                fontConfig.SizePixels = fontSize;
+                assert(strlen(name) < sizeof(fontConfig.Name));
+                std::strncpy(fontConfig.Name, name, sizeof(fontConfig.Name));
+
+                ImFont* loadedFont = io.Fonts->AddFontFromMemoryTTF((void*)data, size, fontSize, &fontConfig);
+                if (!loadedFont)
+                {
+                    LOG_ERROR("Failed to register font {}", name);
+                    return nullptr;
+                }
+
+                static constexpr ImWchar iconsRanges[] = {ICON_MIN_FA, ICON_MAX_16_FA, 0};
+                ImFontConfig iconsConfig;
+                iconsConfig.FontDataOwnedByAtlas = false;
+                iconsConfig.MergeMode = true;
+                iconsConfig.PixelSnapH = true;
+                iconsConfig.GlyphMinAdvanceX = GetIconsFontSize();
+                // iconsConfig.SizePixels = GetIconsFontSize();
+                io.Fonts->AddFontFromMemoryTTF((void*)FA_ICONS_FONT_data, FA_ICONS_FONT_size, GetIconsFontSize(),
+                                               &iconsConfig, iconsRanges);
+
+                LOG_DEBUG("Registered font {0} with size {1}", name, fontSize);
+
+                return loadedFont;
+            };
+
+            font = RegisterFont("NotoSans Regular", NOTOSANS_FONT_data, NOTOSANS_FONT_size, GetFontSize());
+            boldFont = RegisterFont("NotoSans Bold", NOTOSANS_BOLD_FONT_data, NOTOSANS_BOLD_FONT_size, GetBoldFontSize());
+            tqFont = RegisterFont("NotoSans Regular - TQ", NOTOSANS_FONT_data, NOTOSANS_FONT_size, GetTQFontSize());
+            hFont = RegisterFont("NotoSans Regular - H", NOTOSANS_FONT_data, NOTOSANS_FONT_size, GetHFontSize());
+
+            if (!Blur::CreateResources())
+            {
+                LOG_WARN("Failed to create UI Blur resources");
+                blurInitialized = false;
+            }
+            else
+            {
+                LOG_INFO("UI Blur succesfully initialized");
+                blurInitialized = true;
+            }
+
+            SetGameCursorVisibility(hideOverlay);
+
+            Components::CaptureManager::Get().Initialize();
+            TaskbarProgress::Initialize(hwnd);
+
+            DemoLoader::Initialize();
+
+            isInitialized = true;
+
+            LOG_INFO("Initialized UI");
+        }
+        catch (...)
+        {
+            throw std::runtime_error("Failed to initialize UI");
+            // TODO: panic
+        }
+    }
+
+    void Manager::Shutdown()
+    {
+        LOG_DEBUG("Shutting down UI Manager");
+
+        isInitialized = false;
 
         SetWindowLongPtr(D3D9::FindWindowHandle(), GWLP_WNDPROC, (LONG_PTR)originalGameWndProc);
-        Mod::GetGameInterface()->SetMouseMode(Types::MouseMode::Passthrough);
+        SetGameCursorVisibility(true);
 
-        for (const auto& component : uiComponents)
-        {
-            component->Release();
-        }
-        uiComponentsInitialized = false;
+        Blur::DestroyResources();
 
         TaskbarProgress::Shutdown();
 
@@ -33,7 +323,7 @@ namespace IWXMVM::UI
         ImGui::DestroyContext();
     }
 
-    void UIManager::RunImGuiFrame()
+    void Manager::Frame()
     {
         try
         {
@@ -43,52 +333,77 @@ namespace IWXMVM::UI
 
             Input::UpdateState(ImGui::GetIO());
 
-            if (!uiComponentsInitialized)
+            // Blur needs to be captured always because notifications may use it even when the UI is hidden
+            if (blurInitialized)
             {
-                for (const auto& component : GetUIComponents())
-                    component->Initialize();
-                uiComponentsInitialized = true;
+                Blur::Capture();
             }
+
+            overlayHiddenThisFrame = false;
 
             if (Input::KeyDown(ImGuiKey_F1))
             {
-                ToggleOverlay();
+                hideOverlay = !hideOverlay;
+                SetGameCursorVisibility(hideOverlay);
+
+                if (hideOverlay)
+                {
+                    overlayHiddenThisFrame = true;
+                    mousePosWhenHid = ImGui::GetMousePos();
+                    simulatedMouse = mousePosWhenHid;
+
+                    if (opacityAnim.IsInvalid())
+                    {
+                        opacityAnim = Animation::Create(0.1f, 1.0f, 0.0f, OpacityInterp);
+                    }
+                    else
+                    {
+                        opacityAnim.GoForward();
+                    }
+                }
+                else
+                {
+                    // ImGui::TeleportMousePos(mousePosWhenHid);
+                    opacityAnim.GoBackward();
+                }
             }
 
-            if (Input::KeyDown(ImGuiKey_F3))
+            if (Input::KeyDown(InputConfiguration::Get().GetBoundKey(Action::PlaybackToggle)))
             {
-                ToggleImGuiDemo();
+                Components::Playback::TogglePaused();
             }
 
-            if (Input::KeyDown(ImGuiKey_F4))
+            if (!opacityAnim.IsInvalid())
             {
-                ToggleDebugPanel();
+                ImGui::GetStyle().Alpha = opacityAnim.GetVal();
             }
 
-            if (!hideOverlay)
+            if (ImGui::GetStyle().Alpha > 0.0f)
             {
-                GetUIComponent(Component::Background)->Render();
-                GetUIComponent(Component::MenuBar)->Render();
-                GetUIComponent(Component::GameView)->Render();
-                GetUIComponent(Component::PrimaryTabs)->Render();
-                GetUIComponent(Component::ControlBar)->Render();
-                GetUIComponent(Component::ControlsMenu)->Render();
-                GetUIComponent(Component::Preferences)->Render();
-                GetUIComponent(Component::PlayerAnimation)->Render();
-                GetUIComponent(Component::Credits)->Render();
+                Tabs::Add(ICON_FA_FILE_VIDEO, DemoLoader::GetShowPtr());
+
+                if (Mod::GetGameInterface()->GetGameState() == Types::GameState::InDemo)
+                {
+                    Tabs::Add(ICON_FA_SUN, VisualsMenu::GetShowPtr());
+                }
+                else
+                {
+                    *VisualsMenu::GetShowPtr() = false;
+                }
+
+                Tabs::Render();
+
+                ControlBar::Render(KeyframeEditor::Render());
+                DemoLoader::Render();
+                VisualsMenu::Render();
             }
 
-            if (showImGuiDemo)
-            {
-                ImGui::ShowDemoWindow();
-            }
-
-            if (showDebugPanel)
-            {
-                GetUIComponent(Component::DebugPanel)->Render();
-            }
+            // Notifications should be displayed regardless of whether the UI is shown or not
+            Notifications::Render();
 
             Events::Invoke(EventType::OnFrame);
+
+            Animation::UpdateAll(ImGui::GetIO().DeltaTime);
 
             ImGui::EndFrame();
             ImGui::Render();
@@ -108,155 +423,85 @@ namespace IWXMVM::UI
         }
     }
 
-    HRESULT ImGuiWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
+    bool Manager::IsInitialized() noexcept
     {
-        auto& uiManager = UIManager::Get();
-        auto& gameView = uiManager.GetUIComponent(UI::Component::GameView);
-        if (gameView->HasFocus() && uiManager.IsControllableCameraModeSelected())
-        {
-            ImGui::SetMouseCursor(ImGuiMouseCursor_None);
-        }
-
-        if (!uiManager.IsOverlayHidden())
-        {
-            // Make sure the system cursor wasnt hidden by some game logic
-            ShowCursor(TRUE);
-        }
-
-        if (ImGui_ImplWin32_WndProcHandler(hWnd, uMsg, wParam, lParam))
-        {
-            return true;
-        }
-
-        return CallWindowProc(uiManager.GetOriginalGameWndProc(), hWnd, uMsg, wParam, lParam);
+        return isInitialized;
     }
 
-    void UIManager::ToggleOverlay()
+    bool Manager::IsBlurInitialized() noexcept
     {
-        hideOverlay = !hideOverlay;
-        Mod::GetGameInterface()->SetMouseMode(hideOverlay ? Types::MouseMode::Passthrough : Types::MouseMode::Capture);
+        return blurInitialized;
     }
 
-    bool UIManager::IsControllableCameraModeSelected()
+    bool Manager::IsHidden() noexcept
     {
-        auto mode = Components::CameraManager::Get().GetActiveCamera()->GetMode();
-        return mode == Components::Camera::Mode::Free || mode == Components::Camera::Mode::Bone;
+        return hideOverlay;
     }
 
-    ImVec2 UIManager::GetWindowSize(HWND hwnd)
+    ImVec2 Manager::GetWindowPos() noexcept
     {
-        RECT windowRect = {};
-        GetWindowRect(hwnd, &windowRect);
-        ImVec2 windowSize = {static_cast<float>(windowRect.right - windowRect.left),
-                             static_cast<float>(windowRect.bottom - windowRect.top)};
+        RECT rect = {};
+        GetWindowRect(D3D9::FindWindowHandle(), &rect);
+        return {static_cast<float>(rect.left), static_cast<float>(rect.top)};
+    }
+
+    ImVec2 Manager::GetWindowSize() noexcept
+    {
         return windowSize;
     }
 
-    ImVec2 UIManager::GetWindowPosition(HWND hwnd)
+    float Manager::GetWindowSizeX() noexcept
     {
-        RECT windowRect = {};
-        GetWindowRect(hwnd, &windowRect);
-        ImVec2 windowSize = {static_cast<float>(windowRect.left), static_cast<float>(windowRect.top)};
-        return windowSize;
+        return windowSize.x;
     }
 
-    void SetImGuiStyle(float fontSize)
+    float Manager::GetWindowSizeY() noexcept
     {
-        ImGuiStyle& style = ImGui::GetStyle();
-        style.FramePadding = {fontSize * 0.28f, fontSize * 0.28f};
-        style.WindowPadding = {16, 16};
-        style.Colors[ImGuiCol_FrameBg] = ImVec4(0.01f, 0.01f, 0.01f, 0.54f);
-        style.Colors[ImGuiCol_FrameBgHovered] = ImVec4(0.25f, 0.25f, 0.25f, 0.40f);
-        style.Colors[ImGuiCol_SliderGrab] = ImVec4(0.25f, 0.49f, 0.94f, 1.00f);
-        style.Colors[ImGuiCol_Button] = ImVec4(0.41f, 0.41f, 0.41f, 0.40f);
-        style.Colors[ImGuiCol_PlotHistogram] = ImVec4(0.12f, 0.12f, 0.12f, 1.00f);
-        style.Colors[ImGuiCol_ResizeGrip] = ImVec4(0, 0, 0, 0);
+        return windowSize.y;
     }
 
-    INCBIN_EXTERN(IBMPLEX_FONT);
-    INCBIN_EXTERN(TASA_ORBITER_FONT);
-    INCBIN_EXTERN(TASA_ORBITER_BOLD_FONT);
-    INCBIN_EXTERN(RUBIK_FONT);
-    INCBIN_EXTERN(RUBIK_BOLD_FONT);
-    INCBIN_EXTERN(WORK_SANS_FONT);
-    INCBIN_EXTERN(FA_ICONS_FONT);
-
-    void UIManager::Initialize(IDirect3DDevice9* device, HWND hwnd)
+    ImFont* Manager::GetFont() noexcept
     {
-        try
-        {
-            LOG_DEBUG("Initializing ImGui...");
+        return font;
+    }
 
-            LOG_DEBUG("Creating ImGui context");
-            IMGUI_CHECKVERSION();
-            ImGui::CreateContext();
+    float Manager::GetFontSize() noexcept
+    {
+        return fontSize;
+    }
 
-            ImGui::StyleColorsDark();
+    ImFont* Manager::GetBoldFont() noexcept
+    {
+        return boldFont;
+    }
 
-            if (hwnd == nullptr)
-            {
-                hwnd = D3D9::FindWindowHandle();
-            }
-            LOG_DEBUG("Initializing ImGui_ImplWin32 with HWND {0:x}", (std::uintptr_t)hwnd);
-            ImGui_ImplWin32_Init(hwnd);
+    float Manager::GetBoldFontSize() noexcept
+    {
+        return fontSize * 1.5f;
+    }
 
-            LOG_DEBUG("Initializing ImGui_ImplDX9 with D3D9 Device {0:x}", (std::uintptr_t)device);
-            ImGui_ImplDX9_Init(device);
+    ImFont* Manager::GetTQFont() noexcept
+    {
+        return tqFont;
+    }
 
-            // TODO: byte size is game dependent
-            LOG_DEBUG("Hooking WndProc at {0:x}", Mod::GetGameInterface()->GetWndProc());
-            originalGameWndProc = (WNDPROC)SetWindowLongPtr(hwnd, GWLP_WNDPROC, (std::uintptr_t)ImGuiWndProc);
+    float Manager::GetTQFontSize() noexcept
+    {
+        return fontSize * 3.0f / 4.0f;
+    }
 
-            auto windowSize = GetWindowSize(hwnd);
-            auto fontSize = std::floor(windowSize.x / 106.0f);
+    ImFont* Manager::GetHFont() noexcept
+    {
+        return hFont;
+    }
 
-            ImGuiIO& io = ImGui::GetIO();
-            io.IniFilename = NULL;
-            // io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
-            io.Fonts->ClearFonts();
+    float Manager::GetHFontSize() noexcept
+    {
+        return fontSize / 2.0f;
+    }
 
-            auto RegisterFont = [&](const char* name, const uint8_t* data, size_t size, float fontSize) {
-                ImFontConfig fontConfig;
-                fontConfig.FontDataOwnedByAtlas = false;
-                fontConfig.SizePixels = fontSize;
-                strcpy_s(fontConfig.Name, name);
-                io.Fonts->AddFontFromMemoryTTF((void*)data, size, fontSize, &fontConfig);
-                LOG_DEBUG("Registered font {0} with size {1}", name, fontSize);
-
-                auto iconFontSize = fontSize * 2.0f / 3.0f;
-                static const ImWchar icons_ranges[] = {ICON_MIN_FA, ICON_MAX_16_FA, 0};
-                ImFontConfig icons_config;
-                icons_config.FontDataOwnedByAtlas = false;
-                icons_config.MergeMode = true;
-                icons_config.PixelSnapH = true;
-                icons_config.GlyphMinAdvanceX = iconFontSize;
-                io.Fonts->AddFontFromMemoryTTF((void*)FA_ICONS_FONT_data, FA_ICONS_FONT_size, iconFontSize,
-                                               &icons_config, icons_ranges);
-            };
-
-            RegisterFont("RubikRegular", RUBIK_FONT_data, RUBIK_FONT_size, fontSize);
-            RegisterFont("RubikBold", RUBIK_BOLD_FONT_data, RUBIK_BOLD_FONT_size, fontSize);
-            RegisterFont("WorkSansRegular", WORK_SANS_FONT_data, WORK_SANS_FONT_size, fontSize);
-            RegisterFont("IBMPlexSans", IBMPLEX_FONT_data, IBMPLEX_FONT_size, fontSize);
-            RegisterFont("TASAOrbiterDisplay", TASA_ORBITER_FONT_data, TASA_ORBITER_FONT_size, fontSize);
-            RegisterFont("TASAOrbiterDisplayBold", TASA_ORBITER_BOLD_FONT_data, TASA_ORBITER_BOLD_FONT_size, fontSize);
-
-            SetImGuiStyle(fontSize);
-
-            ImGui::GetIO().ConfigInputTrickleEventQueue = false;
-
-            Mod::GetGameInterface()->SetMouseMode(Types::MouseMode::Capture);
-            isInitialized = true;
-
-            Components::CaptureManager::Get().Initialize();
-            TaskbarProgress::Initialize(hwnd);
-
-            LOG_INFO("Initialized UI");
-        }
-        catch (...)
-        {
-            throw std::runtime_error("Failed to initialize UI");
-            // TODO: panic
-        }
+    float Manager::GetIconsFontSize() noexcept
+    {
+        return fontSize * 2.0f / 3.0f;
     }
 }  // namespace IWXMVM::UI

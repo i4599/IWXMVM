@@ -23,6 +23,7 @@ namespace IWXMVM::Components
         void SkipForward(std::int32_t ticks);
         void SkipDemoForward(std::int32_t ticks);
         void SetTickDelta(std::int32_t value, bool ignoreDeadzone = false);
+        void SmartSetTickDelta(std::int32_t value);
 
         void HandleImportedFrozenTickLogic(std::optional<std::uint32_t> frozenTick);
 

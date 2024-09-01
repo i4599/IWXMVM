@@ -1,17 +1,69 @@
 #include "StdInclude.hpp"
 #include "DemoLoader.hpp"
 
+#include "Configuration/PreferencesConfiguration.hpp"
 #include "Mod.hpp"
+#include "Resources.hpp"
+#include "Types/GameState.hpp"
+#include "UI/Animations.hpp"
+#include "UI/Blur.hpp"
 #include "UI/UIManager.hpp"
 #include "Utilities/PathUtils.hpp"
-#include "Resources.hpp"
-#include "Configuration/PreferencesConfiguration.hpp"
+
+#include "imgui_internal.h"
 
 namespace IWXMVM::UI
 {
+    struct DemoDirectory
+    {
+        std::filesystem::path path;                          // Path
+        std::pair<std::size_t, std::size_t> subdirectories;  // Pair of indices representing the [first, second)
+                                                             // interval of directories in the 'demoDirectories' vector
+        std::pair<std::size_t, std::size_t>
+            demos;  // Pair of indices representing the [first, second) interval of demos in the 'demoPaths' vector
+        std::optional<std::size_t> parentIdx;  // Parent directory's index in the 'demoDirectories' vector. Search
+                                               // paths will contain a nullopt value
+        bool relevant;                         // Does this directory ever reach a demo down the line?
+    };
+
+    struct DemoInfo
+    {
+        std::filesystem::path path;
+        Animation anim;
+    };
+
+    static std::pair<std::size_t, std::size_t> searchPaths;  // Pair of indices representing the [first, second)
+                                                             // interval
+                                                             // of search paths in the 'demoDirectories' vector
+    static std::vector<DemoDirectory> demoDirectories;
+    static std::vector<DemoInfo> demoPaths;  // Path to every demo found
+    static std::atomic<bool> isScanningDemoPaths;
+
+    static std::string searchBarText;
+    static std::string lastSearchBarText;
+    static std::vector<std::u8string> searchBarTextSplit;
+    struct cachedfilteredDemos_pairhash
+    {
+        size_t operator()(const std::pair<size_t, size_t>& p) const
+        {
+            size_t h1 = std::hash<size_t>{}(p.first);
+            size_t h2 = std::hash<size_t>{}(p.second);
+            return h1 ^ (h2 << 1);
+        }
+    };
+    static std::unordered_map<std::pair<size_t, size_t>, std::vector<DemoInfo>, cachedfilteredDemos_pairhash>
+        cachedfilteredDemos;
+    static std::size_t totalCachedFilteredDemosCount;
+
+    static std::filesystem::path playingDemoPath;  // Path of last played demo
+
+    static Animation gradientPos;
+
+    static bool show = true;
+
     template <bool caseSensitive, typename T>
         requires std::is_same_v<T, std::string_view> || std::is_same_v<T, std::wstring_view>
-    bool CompareNaturally(const T lhs, const T rhs)
+    static bool CompareNaturally(const T lhs, const T rhs)
     {
         auto IsDigit = [](auto c) { return std::iswdigit(c); };
 
@@ -72,18 +124,18 @@ namespace IWXMVM::UI
         return lhs.length() < rhs.length();
     }
 
-    void SortDemoPaths(const auto demos)
+    static void SortDemoPaths(const auto demos)
     {
         std::sort(demos.begin(), demos.end(), [&](const auto& lhs, const auto& rhs) {
             const std::size_t extLength = Mod::GetGameInterface()->GetDemoExtension().length();
-            const std::size_t dirLength = demos.front().parent_path().native().length();
-            const std::size_t lhsLength = lhs.native().length();
-            const std::size_t rhsLength = rhs.native().length();
+            const std::size_t dirLength = demos.front().path.parent_path().native().length();
+            const std::size_t lhsLength = lhs.path.native().length();
+            const std::size_t rhsLength = rhs.path.native().length();
 
             assert(lhsLength > dirLength + extLength + 1 && rhsLength > dirLength + extLength + 1);
 
-            const auto* lhsFileNamePtr = lhs.c_str() + dirLength + 1;
-            const auto* rhsFileNamePtr = rhs.c_str() + dirLength + 1;
+            const auto* lhsFileNamePtr = lhs.path.c_str() + dirLength + 1;
+            const auto* rhsFileNamePtr = rhs.path.c_str() + dirLength + 1;
             const std::size_t lhsSvLength = lhsLength - dirLength - extLength - 1;
             const std::size_t rhsSvLength = rhsLength - dirLength - extLength - 1;
 
@@ -93,7 +145,7 @@ namespace IWXMVM::UI
         });
     }
 
-    void SortDemoDirectories(const auto directories, auto GetPath)
+    static void SortDemoDirectories(const auto directories, auto GetPath)
     {
         std::sort(directories.begin(), directories.end(), [&](const auto& lhs, const auto& rhs) {
             const auto& lhsPath = GetPath(lhs);
@@ -115,14 +167,12 @@ namespace IWXMVM::UI
         });
     }
 
-    bool IsFileDemo(const std::filesystem::path& file)
+    static bool IsFileDemo(const std::filesystem::path& file)
     {
-        return file.extension().compare(Mod::GetGameInterface()->GetDemoExtension())
-                   ? false
-                   : true;  // .compare() == 0 => strings are equal
+        return file.extension().compare(Mod::GetGameInterface()->GetDemoExtension()) ? false : true;
     }
 
-    void DemoLoader::AddPathsToSearch(const std::vector<std::filesystem::path>& dirs)
+    static void AddPathsToSearch(const std::vector<std::filesystem::path>& dirs)
     {
         for (const auto& dir : dirs)
         {
@@ -135,10 +185,11 @@ namespace IWXMVM::UI
         searchPaths = std::make_pair(0, demoDirectories.size());
     }
 
-    void DemoLoader::SearchDir(std::size_t dirIdx)
+    static void SearchDir(std::size_t dirIdx)
     {
         auto tempDir = std::string(DEMO_TEMP_DIRECTORY);
-        if (demoDirectories[dirIdx].path.wstring().find(std::wstring(tempDir.begin(), tempDir.end())) != std::string::npos)
+        if (demoDirectories[dirIdx].path.wstring().find(std::wstring(tempDir.begin(), tempDir.end())) !=
+            std::string::npos)
         {
             demoDirectories[dirIdx].relevant = false;
             return;
@@ -156,7 +207,7 @@ namespace IWXMVM::UI
             }
             else if (IsFileDemo(entry.path()))
             {
-                demoPaths.push_back(entry.path());
+                demoPaths.push_back({entry.path(), {}});
             }
         }
 
@@ -178,7 +229,7 @@ namespace IWXMVM::UI
         }
     }
 
-    void DemoLoader::Search()
+    static void Search()
     {
         for (auto i = searchPaths.first; i < searchPaths.second; i++)
         {
@@ -186,7 +237,7 @@ namespace IWXMVM::UI
         }
     }
 
-    void DemoLoader::MarkDirsRelevancy()
+    static void MarkDirsRelevancy()
     {
         for (auto it = demoDirectories.rbegin(); it != demoDirectories.rend(); it++)
         {
@@ -206,34 +257,228 @@ namespace IWXMVM::UI
         }
     }
 
-    void DemoLoader::FindAllDemos()
+    static void DrawUnderline(ImVec2 cursorPos, ImVec4 color, ImVec2 textSize, float thickness, float horizontalOffset,
+                       float verticalOffset)
     {
-        isScanningDemoPaths.store(true);
-        std::thread([&] { 
-            demoDirectories.clear();
-            demoPaths.clear();
+        ImGuiIO& io = ImGui::GetIO();
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+        ImVec2 windowPos = ImGui::GetCurrentWindow()->Pos;
+        ImVec2 absoluteCursorPos = {windowPos.x + cursorPos.x - ImGui::GetCurrentWindow()->Scroll.x,
+                                    windowPos.y + cursorPos.y - ImGui::GetCurrentWindow()->Scroll.y};
 
-            auto searchPaths = std::vector(PreferencesConfiguration::Get().additionalDemoSearchDirectories);
-            searchPaths.push_back(PathUtils::GetCurrentGameDirectory());
-
-            AddPathsToSearch(searchPaths);
-            Search();
-
-            // 'demoDirectories' and 'demoPaths' are complete here, but we still need to find out the relevancy of each
-            // directory
-            MarkDirsRelevancy();
-
-            isScanningDemoPaths.store(false);            
-        }).detach();
+        drawList->AddRectFilled(
+            {absoluteCursorPos.x + horizontalOffset, absoluteCursorPos.y + textSize.y + verticalOffset},
+            {absoluteCursorPos.x + textSize.x + horizontalOffset,
+             absoluteCursorPos.y + textSize.y - thickness + verticalOffset},
+            ImGui::ColorConvertFloat4ToU32(color), 0.0f, ImDrawFlags_Closed);
     }
 
-    bool DemoLoader::DemoFilter(const std::u8string& demoFileName)
+    static void DrawGradientHorizontal(ImVec2 topLeft, ImVec2 bottomRight, ImVec4 color)
+    {
+        ImGuiIO& io = ImGui::GetIO();
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+        ImVec2 windowPos = ImGui::GetCurrentWindow()->Pos;
+        ImVec2 scroll = ImGui::GetCurrentWindow()->Scroll;
+
+        ImVec2 pMin = {windowPos.x + topLeft.x - scroll.x, windowPos.y + topLeft.y - scroll.y};
+        ImVec2 pMax = {windowPos.x + bottomRight.x - scroll.x, windowPos.y + bottomRight.y - scroll.y};
+
+        drawList->PrimReserve(6, 4);
+
+        auto* _IdxWritePtr = drawList->_IdxWritePtr;
+        auto* _VtxWritePtr = drawList->_VtxWritePtr;
+        ImU32 colU32 = ImGui::ColorConvertFloat4ToU32({color.x, color.y, color.z, color.w * ImGui::GetStyle().Alpha});
+        ImU32 colTransparentU32 = ImGui::ColorConvertFloat4ToU32({color.x, color.y, color.z, 0.0f});
+        ImVec2 b(pMax.x, pMin.y), d(pMin.x, pMax.y), uv(drawList->_Data->TexUvWhitePixel);
+        ImDrawIdx idx = (ImDrawIdx)drawList->_VtxCurrentIdx;
+        _IdxWritePtr[0] = idx;
+        _IdxWritePtr[1] = (ImDrawIdx)(idx + 1);
+        _IdxWritePtr[2] = (ImDrawIdx)(idx + 2);
+        _IdxWritePtr[3] = idx;
+        _IdxWritePtr[4] = (ImDrawIdx)(idx + 2);
+        _IdxWritePtr[5] = (ImDrawIdx)(idx + 3);
+        _VtxWritePtr[0].pos = pMin;
+        _VtxWritePtr[0].uv = uv;
+        _VtxWritePtr[0].col = colU32;
+        _VtxWritePtr[1].pos = b;
+        _VtxWritePtr[1].uv = uv;
+        _VtxWritePtr[1].col = colTransparentU32;
+        _VtxWritePtr[2].pos = pMax;
+        _VtxWritePtr[2].uv = uv;
+        _VtxWritePtr[2].col = colTransparentU32;
+        _VtxWritePtr[3].pos = d;
+        _VtxWritePtr[3].uv = uv;
+        _VtxWritePtr[3].col = colU32;
+
+        drawList->_VtxWritePtr += 4;
+        drawList->_VtxCurrentIdx += 4;
+        drawList->_IdxWritePtr += 6;
+    }
+
+    static float Interp(float a, float b, float t)
+    {
+        float new_t = powf(sinf(t * glm::pi<float>() / 2.0f), 0.7f);
+        return std::lerp(a, b, new_t);
+    }
+
+    static float GradientInterp(float a, float b, float t)
+    {
+        float new_t = t < 0.5f ? 4.0f * t * t * t : 1.0f - std::pow(-2.0f * t + 2.0f, 3.0f) / 2.0f;
+        return std::lerp(a, b, new_t);
+    }
+
+    static void RenderDemos(std::vector<DemoInfo>& demos)
+    {
+        ImGuiListClipper clipper;
+        clipper.Begin(demos.size());
+
+        const auto gameState = Mod::GetGameInterface()->GetGameState();
+        const bool isInDemo = gameState == Types::GameState::InDemo || gameState == Types::GameState::LoadingDemo;
+
+        while (clipper.Step())
+        {
+            for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
+            {
+                bool isThePlayingDemo = false;
+                if (demos[i].path == playingDemoPath && isInDemo)
+                {
+                    isThePlayingDemo = true;
+                }
+
+                ImGui::SetCursorPosX(ImGui::GetCursorPosX() + Manager::GetFontSize() / 7.0f);
+
+                ImVec2 iconCursorPos = ImGui::GetCursorPos();
+
+                if (!isThePlayingDemo)
+                {
+                    ImGui::Text(ICON_FA_FILE_VIDEO);
+                    ImGui::SameLine();
+                }
+                else
+                {
+                    ImVec2 iconSize = ImGui::CalcTextSize(ICON_FA_FILE_VIDEO);
+                    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + iconSize.x);
+                }
+
+                const auto demoName = demos[i].path.filename().string();
+                ImVec2 textCursorPos = {ImGui::GetCursorPosX() + Manager::GetFontSize() / 12.0f,
+                                        ImGui::GetCursorPosY()};
+                ImGui::SetCursorPos(textCursorPos);
+
+                if (!demos[i].anim.IsInvalid())
+                {
+                    float t = demos[i].anim.GetVal();
+                    ImGui::PushStyleColor(ImGuiCol_Text, {1.0f, 1.0f, 1.0f, 1.0f - (t / 2.5f)});
+                }
+
+                if (isThePlayingDemo)
+                    ImGui::PushStyleColor(ImGuiCol_Text, {1.0f, 1.0f, 1.0f, 1.0f - (1.0f / 2.5f)});
+
+                ImGui::Text("%s", demoName.c_str());
+
+                if (isThePlayingDemo)
+                    ImGui::PopStyleColor(1);
+
+                if (!demos[i].anim.IsInvalid())
+                    ImGui::PopStyleColor(1);
+
+                ImVec2 textSize = ImGui::CalcTextSize(demoName.c_str());
+
+                if (isThePlayingDemo)
+                {
+                    demos[i].anim.Invalidate();
+
+                    ImVec2 oldCursorPos = ImGui::GetCursorPos();
+
+                    ImGui::SetCursorPos({iconCursorPos.x, iconCursorPos.y});
+                    ImGui::PushStyleColor(ImGuiCol_Text, {1.0f, 0.4f, 0.4f, 1.0f});
+                    ImGui::Text(ICON_FA_CIRCLE);
+                    ImGui::PopStyleColor();
+
+                    ImGui::SetCursorPos(oldCursorPos);
+
+                    if (!gradientPos.IsInvalid())
+                    {
+                        static float a = 0.0f;
+                        a += ImGui::GetIO().DeltaTime;
+                        a = std::fmod(a, glm::pi<float>());
+                        DrawGradientHorizontal({0.0f, ImGui::GetCursorPosY() - Manager::GetFontSize()},
+                                               {gradientPos.GetVal(), ImGui::GetCursorPosY()},
+                                               {1.0f, 1.0f, 1.0f, 0.75f * (glm::abs(glm::sin(a)) + 2.0f) / 3.0f});
+                    }
+                }
+
+                const float cursorPosAfterText = ImGui::GetCursorPosX();
+
+                if (!demos[i].anim.IsInvalid() && demos[i].anim.IsFinished())
+                {
+                    demos[i].anim.Invalidate();
+                }
+
+                if (ImGui::IsItemHovered(ImGuiHoveredFlags_None))
+                {
+                    if (!isThePlayingDemo)
+                    {
+                        if (demos[i].anim.IsInvalid())
+                            demos[i].anim = Animation::Create(0.2f, 0.0f, 1.0f, Interp);
+                        else
+                            demos[i].anim.GoForward();
+                    }
+
+                    if (ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+                    {
+                        if (!isThePlayingDemo)
+                        {
+                            Mod::GetGameInterface()->PlayDemo(demos[i].path);
+
+                            playingDemoPath = demos[i].path;
+
+                            gradientPos.Invalidate();
+                            gradientPos = Animation::Create(1.2f, 0.0f, cursorPosAfterText, GradientInterp);
+                        }
+                        else
+                        {
+                            Mod::GetGameInterface()->Disconnect();
+                        }
+                    }
+                }
+                else if (!demos[i].anim.IsInvalid())
+                {
+                    demos[i].anim.GoBackward();
+                }
+
+                if (!demos[i].anim.IsInvalid())
+                {
+                    ImVec4 color = {1.0f, 1.0f, 1.0f, 1.0f - (1.0f / 2.5f)};
+                    if (ImGui::IsMouseDown(ImGuiMouseButton_Left))
+                        color.w = 1.0f - (1.0f / 1.5f);
+
+                    DrawUnderline(textCursorPos, color, {textSize.x * demos[i].anim.GetVal(), textSize.y}, 1.0f,
+                                  Manager::GetFontSize() / 18.0f, Manager::GetFontSize() / 9.0f);
+                }
+            }
+        }
+    }
+
+    static void RecacheSearchBarTextSplit()
+    {
+        searchBarTextSplit.clear();
+
+        std::stringstream ss(searchBarText);
+        std::string token;
+
+        while (std::getline(ss, token, ' '))
+        {
+            searchBarTextSplit.push_back(std::u8string(token.begin(), token.end()));
+        }
+    }
+
+    static bool DemoFilter(const std::u8string& demoFileName)
     {
         // TODO: possibly make filter more advanced, add features like "" for exact search etc
         bool keepDemo = true;
         std::u8string lowerDemoFileName = demoFileName;
-        std::transform(lowerDemoFileName.begin(), lowerDemoFileName.end(), lowerDemoFileName.begin(),
-                       ::tolower);
+        std::transform(lowerDemoFileName.begin(), lowerDemoFileName.end(), lowerDemoFileName.begin(), ::tolower);
         for (auto& word : searchBarTextSplit)
         {
             std::transform(word.begin(), word.end(), word.begin(), ::tolower);
@@ -246,56 +491,8 @@ namespace IWXMVM::UI
         return keepDemo;
     }
 
-
-    void DemoLoader::RenderDemos(const std::vector<std::filesystem::path>& demos)
-    {
-        ImGuiListClipper clipper;
-        clipper.Begin(demos.size());
-
-        while (clipper.Step())
-        {
-            for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
-            {
-                try
-                {
-                    auto demoName = demos[i].filename().string();
-
-                    if (Mod::GetGameInterface()->GetGameState() == Types::GameState::InDemo &&
-                        Mod::GetGameInterface()->GetDemoInfo().name == demoName)
-                    {
-                        if (ImGui::Button(std::format(ICON_FA_STOP " STOP##{0}", demoName).c_str(),
-                                          ImVec2(ImGui::GetFontSize() * 4, ImGui::GetFontSize() * 1.5f)))
-                        {
-                            Mod::GetGameInterface()->Disconnect();
-                        }
-                    }
-                    else
-                    {
-                        if (ImGui::Button(std::format(ICON_FA_PLAY " PLAY##{0}", demoName).c_str(),
-                                          ImVec2(ImGui::GetFontSize() * 4, ImGui::GetFontSize() * 1.5f)))
-                        {
-                            Mod::GetGameInterface()->PlayDemo(demos[i]);
-                        }
-                    }
-
-                    ImGui::SameLine();
-
-                    ImGui::Text("%s", demoName.c_str());
-                }
-                catch (std::exception&)
-                {
-                    ImGui::BeginDisabled();
-                    ImGui::Button(ICON_FA_TRIANGLE_EXCLAMATION " ERROR");
-                    ImGui::SameLine();
-                    ImGui::Text("<invalid demo name>");
-                    ImGui::EndDisabled();
-                }
-            }
-        }
-    }
-
     // Wrapper for RenderDemos
-    void DemoLoader::FilteredRenderDemos(const std::pair<std::size_t, std::size_t>& demos)
+    static void FilteredRenderDemos(const std::pair<std::size_t, std::size_t>& demos)
     {
         auto it = cachedfilteredDemos.find(demos);
         if (it != cachedfilteredDemos.end())
@@ -304,12 +501,12 @@ namespace IWXMVM::UI
             return;
         }
 
-        std::vector<std::filesystem::path> filteredDemos;
+        std::vector<DemoInfo> filteredDemos;
         for (std::size_t i = demos.first; i < demos.second; i++)
         {
             try
             {
-                if (searchBarText.empty() || DemoFilter(demoPaths[i].filename().u8string()))
+                if (searchBarText.empty() || DemoFilter(demoPaths[i].path.filename().u8string()))
                 {
                     filteredDemos.push_back(demoPaths[i]);
                 }
@@ -325,8 +522,7 @@ namespace IWXMVM::UI
         RenderDemos(filteredDemos);
     }
 
-
-    void DemoLoader::RenderDir(const DemoDirectory& dir)
+    static void RenderDir(const DemoDirectory& dir)
     {
         try
         {
@@ -348,68 +544,14 @@ namespace IWXMVM::UI
         }
         catch (std::exception&)
         {
-			ImGui::BeginDisabled();
-			ImGui::TreeNode("<invalid directory name>");
-            ImGui::TreePop();
-			ImGui::EndDisabled();
-		}
-    }
-
-    void DemoLoader::RecacheSearchBarTextSplit()
-    {
-        searchBarTextSplit.clear();
-
-        std::stringstream ss(searchBarText);
-        std::string token;
-
-        while (std::getline(ss, token, ' '))
-        {
-            searchBarTextSplit.push_back(std::u8string(token.begin(), token.end()));
-        }
-    }
-
-    void DemoLoader::RenderSearchBar()
-    {
-        int flags = ImGuiInputTextFlags_CallbackResize;
-        bool disableInputText =
-            Mod::GetGameInterface()->IsConsoleOpen() ||
-            (UI::UIManager::Get().IsControllableCameraModeSelected() && UI::UIManager::Get().GetUIComponent(UI::Component::GameView)->HasFocus());
-        if (disableInputText)
-        {
             ImGui::BeginDisabled();
-            flags = flags | ImGuiInputTextFlags_ReadOnly;
-        }
-        
-        ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
-        ImGui::InputTextWithHint(
-            "##SearchInput", "Search...", &searchBarText[0], searchBarText.capacity() + 1, flags,
-            [](ImGuiInputTextCallbackData* data) -> int
-            {
-                if (data->EventFlag == ImGuiInputTextFlags_CallbackResize)
-                {
-                    std::string* str = reinterpret_cast<std::string*>(data->UserData);
-                    str->resize(data->BufTextLen);
-                    data->Buf = &(*str)[0];
-                }
-                return 0;
-            },
-            &searchBarText);
-
-        if (disableInputText)
-        {
+            ImGui::TreeNode("<invalid directory name>");
+            ImGui::TreePop();
             ImGui::EndDisabled();
         }
-
-        if (lastSearchBarText != searchBarText)
-        {
-            RecacheSearchBarTextSplit();
-            cachedfilteredDemos.clear();
-            totalCachedFilteredDemosCount = 0;
-            lastSearchBarText = searchBarText;
-        }
     }
 
-    void DemoLoader::RenderSearchPaths()
+    static void RenderSearchPaths()
     {
         for (auto i = searchPaths.first; i < searchPaths.second; i++)
         {
@@ -439,74 +581,135 @@ namespace IWXMVM::UI
         }
     }
 
+    static void Refresh()
+    {
+        if (isScanningDemoPaths.load())
+        {
+            return;
+        }
+
+        isScanningDemoPaths.store(true);
+        std::thread([&] {
+            demoDirectories.clear();
+            demoPaths.clear();
+
+            auto searchPaths = std::vector(PreferencesConfiguration::Get().additionalDemoSearchDirectories);
+            searchPaths.push_back(PathUtils::GetCurrentGameDirectory());
+
+            AddPathsToSearch(searchPaths);
+            Search();
+
+            // 'demoDirectories' and 'demoPaths' are complete here, but we still need to find out the relevancy of each
+            // directory
+            MarkDirsRelevancy();
+
+            isScanningDemoPaths.store(false);
+        }).detach();
+    }
+
     void DemoLoader::Initialize()
     {
-        FindAllDemos();
+        Refresh();
     }
 
     void DemoLoader::Render()
     {
-        ImGuiWindowFlags flags = ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_NoCollapse |
-                                 ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar;
+        if (!show)
+        {
+            return;
+        }
+
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_IndentSpacing, Manager::GetFontSize());
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
+
+        float width = (float)Manager::GetWindowSizeX() / 5.0f;
+        float height = (float)Manager::GetWindowSizeY() / 1.7f;
+        ImVec2 size = {width, height};
+        ImGui::SetNextWindowSize(size, ImGuiCond_Once);
+
+        float X = (float)Manager::GetWindowSizeX() / 1.4f - width / 2.0f;
+        float Y = (float)Manager::GetWindowSizeY() / 2.0f - height / 2.0f;
+        ImVec2 pos = {X, Y};
+        ImGui::SetNextWindowPos(pos, ImGuiCond_Once);
+
+        ImGuiWindowFlags flags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse |
+                                 ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar;
+
         if (ImGui::Begin("Demos", nullptr, flags))
         {
-            ImGui::AlignTextToFramePadding();
+            size = ImGui::GetWindowSize();
+            pos = ImGui::GetWindowPos();
 
-            if (isScanningDemoPaths.load())
+            Blur::RenderToWindow(size, pos);
+
+            // Search bar
             {
-                ImGui::Text("Searching for demo files...");
+                float windowGap = Manager::GetFontSize() * 1.2f;
+                ImGui::SetCursorPos({windowGap, windowGap * 0.6f});
+                ImGui::Text(ICON_FA_MAGNIFYING_GLASS);
+                ImVec2 iconSize = ImGui::CalcTextSize(ICON_FA_MAGNIFYING_GLASS);
+                ImGui::SameLine(windowGap + iconSize.x + Manager::GetFontSize() * 0.2f);
+                ImGui::SetNextItemWidth(size.x - windowGap - ImGui::GetCursorPosX());
+                ImGui::InputTextWithHint(
+                    "##SearchInput", "Search...", &searchBarText[0], searchBarText.capacity() + 1,
+                    ImGuiInputTextFlags_CallbackResize,
+                    [](ImGuiInputTextCallbackData* data) -> int {
+                        if (data->EventFlag == ImGuiInputTextFlags_CallbackResize)
+                        {
+                            std::string* str = reinterpret_cast<std::string*>(data->UserData);
+                            str->resize(data->BufTextLen);
+                            data->Buf = &(*str)[0];
+                        }
+                        return 0;
+                    },
+                    &searchBarText);
+
+                if (lastSearchBarText != searchBarText)
+                {
+                    RecacheSearchBarTextSplit();
+                    cachedfilteredDemos.clear();
+                    totalCachedFilteredDemosCount = 0;
+                    lastSearchBarText = searchBarText;
+                }
             }
-            else
+
+            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + Manager::GetFontSize() * 0.4f);
+
+            ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal, 4.0f);
+
+            float vertOffset = ImGui::GetCursorPosY();
+
+            ImVec2 refreshButtonPos = {0.0f, size.y - Manager::GetFontSize() * 1.6f};
+            ImVec2 refreshButtonSize = {size.x, size.y - refreshButtonPos.y};
+
+            ImGuiWindowFlags childWindowFlags =
+                ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar;
+            ImGui::BeginChild("Demos_Window", {size.x, size.y - refreshButtonSize.y - vertOffset}, 0, childWindowFlags);
+
+            if (!isScanningDemoPaths.load())
             {
-                ImGui::AlignTextToFramePadding();
-                ImGui::Text("%d demos found!",
-                            searchBarText.empty() ? demoPaths.size() : totalCachedFilteredDemosCount);
-                ImGui::SameLine();
-
-                auto addPathButtonLabel = std::string(ICON_FA_FOLDER_OPEN " Add path");
-                auto refreshButtonLabel = std::string(ICON_FA_ROTATE_RIGHT " Refresh");
-                auto buttonSize = ImVec2(ImGui::GetFontSize() * 6.0f, ImGui::GetFontSize() * 1.75f);
-
-                if (ImGui::GetWindowWidth() < buttonSize.x * 4)
-                {
-                    buttonSize = ImVec2(buttonSize.y, buttonSize.y);
-                    addPathButtonLabel = addPathButtonLabel.substr(0, addPathButtonLabel.find(" "));
-                    refreshButtonLabel = refreshButtonLabel.substr(0, refreshButtonLabel.find(" "));
-                }
-
-                ImGui::SetCursorPosX(ImGui::GetWindowWidth() - buttonSize.x * 2 - ImGui::GetStyle().ItemSpacing.x -
-                                     ImGui::GetStyle().WindowPadding.x);
-                
-                if (ImGui::Button(addPathButtonLabel.c_str(), buttonSize))
-                {
-                    auto path = PathUtils::OpenFolderBrowseDialog();
-                    if (path.has_value())
-                    {
-                        PreferencesConfiguration::Get().additionalDemoSearchDirectories.push_back(path.value());
-                        Configuration::Get().Write(true); 
-						FindAllDemos();
-                    }
-                }
-
-                ImGui::SameLine();
-
-                if (ImGui::Button(refreshButtonLabel.c_str(), buttonSize))
-                {
-                    FindAllDemos();
-                    ImGui::End();
-                    return;
-                }
-
-                // Search paths will always be rendered, even if empty
-                RenderSearchBar();
                 RenderSearchPaths();
             }
 
-            ImGui::End();
+            ImGui::EndChild();
+
+            ImGui::SetCursorPos(refreshButtonPos);
+            if (ImGui::Button("Refresh", refreshButtonSize))
+            {
+                Refresh();
+                ImGui::End();
+                ImGui::PopStyleVar(3);
+                return;
+            }
         }
+        ImGui::End();
+
+        ImGui::PopStyleVar(3);
     }
 
-    void DemoLoader::Release()
+    bool* DemoLoader::GetShowPtr() noexcept
     {
+        return &show;
     }
 }  // namespace IWXMVM::UI

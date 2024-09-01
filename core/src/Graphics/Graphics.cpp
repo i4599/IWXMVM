@@ -232,13 +232,7 @@ namespace IWXMVM::GFX
 
     glm::vec3 GetMouseRay(ImVec2 mousePos, glm::mat4 projection, glm::mat4 view)
     {
-        ImVec2 viewportTopLeft = 
-            UI::UIManager::Get().GetUIComponent<UI::GameView>(UI::Component::Component::GameView)->GetViewportPosition();
-        ImVec2 viewportSize =
-            UI::UIManager::Get().GetUIComponent<UI::GameView>(UI::Component::Component::GameView)->GetViewportSize();
-
-        mousePos.x -= viewportTopLeft.x;
-        mousePos.y -= viewportTopLeft.y;
+        ImVec2 viewportSize = UI::Manager::GetWindowSize();
 
         glm::vec4 mouseClipSpace(
             1.0f - mousePos.x / viewportSize.x * 2.0f,

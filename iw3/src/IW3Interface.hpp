@@ -81,10 +81,16 @@ namespace IWXMVM::IW3
 
         Types::GameState GetGameState() final
         {
-            if (!Functions::FindDvar("cl_ingame")->current.enabled)
+            const bool cl_ingame = Functions::FindDvar("cl_ingame")->current.enabled;
+            const bool demoplaying = Structures::GetClientConnection()->demoplaying;
+
+            if (!cl_ingame && demoplaying)
+                return Types::GameState::LoadingDemo;
+
+            if (!cl_ingame)
                 return Types::GameState::MainMenu;
 
-            if (Structures::GetClientConnection()->demoplaying)
+            if (demoplaying)
                 return Types::GameState::InDemo;
 
             return Types::GameState::InGame;

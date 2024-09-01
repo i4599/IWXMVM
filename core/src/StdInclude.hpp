@@ -29,12 +29,14 @@
 #include <d3dx9tex.h>
 
 #include <Windows.h>
+#include <Windowsx.h>
 #include <psapi.h>
 #include <shobjidl.h>
 #include <Propkey.h>
 
 #include "Logger.hpp"
 
+#define GLM_ENABLE_EXPERIMENTAL
 #include "glm/glm.hpp"
 #include "glm/ext.hpp"
 #include "glm/gtx/euler_angles.hpp"

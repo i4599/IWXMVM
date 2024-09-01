@@ -126,14 +126,12 @@ namespace ImGuiEx
         if (!temp_input_is_active)
         {
             // Tabbing or CTRL-clicking on Slider turns it into an input box
-            const bool input_requested_by_tabbing =
-                temp_input_allowed && (g.LastItemData.StatusFlags & ImGuiItemStatusFlags_FocusedByTabbing) != 0;
-            const bool clicked = hovered && IsMouseClicked(0, id);
-            const bool make_active = (input_requested_by_tabbing || clicked || g.NavActivateId == id);
+            const bool clicked = hovered && IsMouseClicked(0, ImGuiInputFlags_None, id);
+            const bool make_active = (clicked || g.NavActivateId == id);
             if (make_active && clicked)
                 SetKeyOwner(ImGuiKey_MouseLeft, id);
             if (make_active && temp_input_allowed)
-                if (input_requested_by_tabbing || (clicked && g.IO.KeyCtrl) ||
+                if ((clicked && g.IO.KeyCtrl) ||
                     (g.NavActivateId == id && (g.NavActivateFlags & ImGuiActivateFlags_PreferInput)))
                     temp_input_is_active = true;
 
@@ -155,11 +153,9 @@ namespace ImGuiEx
         }
 
         // Draw frame
-        const ImU32 frame_col = GetColorU32(g.ActiveId == id
-                                                ? ImGuiCol_FrameBgActive
-                                                : hovered
-                                                ? ImGuiCol_FrameBgHovered
-                                                : ImGuiCol_FrameBg);
+        const ImU32 frame_col = GetColorU32(g.ActiveId == id ? ImGuiCol_FrameBgActive
+                                            : hovered        ? ImGuiCol_FrameBgHovered
+                                                             : ImGuiCol_FrameBg);
         RenderNavHighlight(frame_bb, id);
         RenderFrame(frame_bb.Min, frame_bb.Max, frame_col, true, g.Style.FrameRounding);
 
