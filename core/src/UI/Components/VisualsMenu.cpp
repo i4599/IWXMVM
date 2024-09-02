@@ -221,10 +221,62 @@ namespace IWXMVM::UI
             float checkboxIndent = windowGap + textIndent * 2.0f;
             float colorIndent = checkboxIndent + Manager::GetFontSize() * 8.0f;
 
-            // HUD Section
+            // Sun Section
             ImGui::SetCursorPos({0.0f, windowGap + Manager::GetFontSize() * 1.6f + separatorGap});
             ImGui::SetNextItemWidth(size.x);
             float oldCursorY = ImGui::GetCursorPosY();
+            ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal, 2.0f);
+
+            ImGui::PushFont(Manager::GetBoldFont());
+            ImVec2 sunTextPos = {
+                windowGap,
+                oldCursorY + 2.0f + separatorGap,
+            };
+            ImVec2 sunTextSize = ImGui::CalcTextSize("Sun");
+            ImGui::SetCursorPos(sunTextPos);
+            ImGui::Text("Sun");
+            ImGui::PopFont();
+            {
+                bool modified = false;
+
+                ImGui::SetCursorPos({0.0f, sunTextPos.y + sunTextSize.y + separatorGap});
+                ImVec2 oldCursor = ImGui::GetCursorPos();
+                ImGui::SetNextItemWidth(size.x);
+                ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal, 2.0f);
+
+                ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, {0.0f, Manager::GetFontSize() * 0.24f});
+                ImGui::PushStyleVar(ImGuiStyleVar_ItemInnerSpacing, {Manager::GetFontSize() * 0.1f, 0.0f});
+
+                ImGui::SetCursorPos({windowGap + textIndent, oldCursor.y + 2.0f + separatorGap});
+                ImGui::Text("Color");
+                ImGui::SameLine(size.x - colorIndent);
+                ImGui::SetNextItemWidth(colorIndent - checkboxIndent + Manager::GetFontSize());
+                modified |= ImGui::ColorEdit3("##SunColor", glm::value_ptr(visuals.sunColor));
+
+                ImGui::SetCursorPosX(windowGap + textIndent);
+                ImGui::Text("Brightness");
+                ImGui::SameLine(size.x - colorIndent);
+                ImGui::SetNextItemWidth(colorIndent - checkboxIndent + Manager::GetFontSize());
+                modified |= ImGui::SliderFloat("##SunBrightness", &visuals.sunBrightness, 0.0f, 8.0f);
+
+                ImGui::SetCursorPosX(windowGap + textIndent);
+                ImGui::Text("Direction");
+                ImGui::SameLine(size.x - colorIndent);
+                ImGui::SetNextItemWidth(colorIndent - checkboxIndent + Manager::GetFontSize());
+                modified |=
+                    ImGui::SliderFloat3("##SunDirection", glm::value_ptr(visuals.sunDirection), -180.0f, 180.0f);
+
+                if (modified)
+                {
+                    UpdateSun();
+                }
+
+                ImGui::PopStyleVar(2);
+            }
+
+            // HUD Section
+            ImGui::SetCursorPos({0.0f, ImGui::GetCursorPosY() + separatorGap});
+            oldCursorY = ImGui::GetCursorPosY();
             ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal, 2.0f);
 
             ImGui::PushFont(Manager::GetBoldFont());
@@ -305,75 +357,22 @@ namespace IWXMVM::UI
 
                     ImGui::PopStyleVar(2);
                 }
-                
+
                 if (modified)
                 {
                     UpdateHudInfo();
                 }
             }
 
-            // Sun Section
-            {
-                bool modified = false;
-
-                if (visuals.hudInfo.show2DElements)
-                {
-                    ImGui::SetCursorPos({0.0f, ImGui::GetCursorPosY() + separatorGap});
-                }
-                else
-                {
-                    ImGui::SetCursorPos({0.0f, hudTextPos.y + hudTextSize.y + separatorGap});
-                }
-                
-                oldCursorY = ImGui::GetCursorPosY();
-                ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal, 2.0f);
-
-                ImGui::PushFont(Manager::GetBoldFont());
-                ImVec2 sunTextPos = {
-                    windowGap,
-                    oldCursorY + 2.0f + separatorGap,
-                };
-                ImVec2 sunTextSize = ImGui::CalcTextSize("Sun");
-                ImGui::SetCursorPos(sunTextPos);
-                ImGui::Text("Sun");
-                ImGui::PopFont();
-
-                ImGui::SetCursorPosY(sunTextPos.y + sunTextSize.y + separatorGap);
-                oldCursorY = ImGui::GetCursorPosY();
-                ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal, 2.0f);
-
-                ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, {0.0f, Manager::GetFontSize() * 0.24f});
-                ImGui::PushStyleVar(ImGuiStyleVar_ItemInnerSpacing, {Manager::GetFontSize() * 0.1f, 0.0f});
-
-                ImGui::SetCursorPos({windowGap + textIndent, oldCursorY + 2.0f + separatorGap});
-                ImGui::Text("Color");
-                ImGui::SameLine(size.x - colorIndent);
-                ImGui::SetNextItemWidth(colorIndent - checkboxIndent + Manager::GetFontSize());
-                modified |= ImGui::ColorEdit3("##SunColor", glm::value_ptr(visuals.sunColor));
-
-                ImGui::SetCursorPosX(windowGap + textIndent);
-                ImGui::Text("Brightness");
-                ImGui::SameLine(size.x - colorIndent);
-                ImGui::SetNextItemWidth(colorIndent - checkboxIndent + Manager::GetFontSize());
-                modified |= ImGui::SliderFloat("##SunBrightness", &visuals.sunBrightness, 0.0f, 8.0f);
-
-                ImGui::SetCursorPosX(windowGap + textIndent);
-                ImGui::Text("Direction");
-                ImGui::SameLine(size.x - colorIndent);
-                ImGui::SetNextItemWidth(colorIndent - checkboxIndent + Manager::GetFontSize());
-                modified |=
-                    ImGui::SliderFloat3("##SunDirection", glm::value_ptr(visuals.sunDirection), -180.0f, 180.0f);
-
-                if (modified)
-                {
-                    UpdateSun();
-                }
-
-                ImGui::PopStyleVar(2);
-            }
-
             // Filmtweaks section
-            ImGui::SetCursorPos({0.0f, ImGui::GetCursorPosY() + separatorGap});
+            if (visuals.hudInfo.show2DElements)
+            {
+                ImGui::SetCursorPos({0.0f, ImGui::GetCursorPosY() + separatorGap});
+            }
+            else
+            {
+                ImGui::SetCursorPos({0.0f, hudTextPos.y + hudTextSize.y + separatorGap});
+            }
             oldCursorY = ImGui::GetCursorPosY();
             ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal, 2.0f);
 
@@ -444,30 +443,29 @@ namespace IWXMVM::UI
             }
 
             // DOF Section
+            if (visuals.filmtweaks.enabled)
+            {
+                ImGui::SetCursorPos({0.0f, ImGui::GetCursorPosY() + separatorGap});
+            }
+            else
+            {
+                ImGui::SetCursorPos({0.0f, filmTextPos.y + filmTextSize.y + separatorGap});
+            }
+
+            oldCursorY = ImGui::GetCursorPosY();
+            ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal, 2.0f);
+
+            ImGui::PushFont(Manager::GetBoldFont());
+            ImVec2 dofTextPos = {
+                windowGap,
+                oldCursorY + 2.0f + separatorGap,
+            };
+            ImVec2 dofTextSize = ImGui::CalcTextSize("DOF");
+            ImGui::SetCursorPos(dofTextPos);
+            ImGui::Text("DOF");
+            ImGui::PopFont();
             {
                 bool modified = false;
-
-                if (visuals.filmtweaks.enabled)
-                {
-                    ImGui::SetCursorPos({0.0f, ImGui::GetCursorPosY() + separatorGap});
-                }
-                else
-                {
-                    ImGui::SetCursorPos({0.0f, filmTextPos.y + filmTextSize.y + separatorGap});
-                }
-
-                oldCursorY = ImGui::GetCursorPosY();
-                ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal, 2.0f);
-
-                ImGui::PushFont(Manager::GetBoldFont());
-                ImVec2 dofTextPos = {
-                    windowGap,
-                    oldCursorY + 2.0f + separatorGap,
-                };
-                ImVec2 dofTextSize = ImGui::CalcTextSize("DOF");
-                ImGui::SetCursorPos(dofTextPos);
-                ImGui::Text("DOF");
-                ImGui::PopFont();
 
                 ImGui::SetCursorPos({dofTextPos.x + dofTextSize.x + Manager::GetFontSize() * 0.5f,
                                      dofTextPos.y + (dofTextSize.y - Manager::GetFontSize()) / 2.0f});
