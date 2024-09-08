@@ -471,7 +471,7 @@ namespace IWXMVM::UI
 
             ImVec2 uv0 = {pos.x / Manager::GetWindowSizeX(), pos.y / Manager::GetWindowSizeY()};
             ImVec2 uv1 = {(pos.x + size.x) / Manager::GetWindowSizeX(), (pos.y + size.y) / Manager::GetWindowSizeY()};
-            ImGui::Image(reinterpret_cast<ImTextureID>(Blur::GetTexture()), size, uv0, uv1, {1.0f, 1.0f, 1.0f, 0.4f});
+            ImGui::Image(reinterpret_cast<ImTextureID>(Blur::GetTexture()), size, uv0, uv1, {1.0f, 1.0f, 1.0f, 0.25f});
 
             ImGui::SetCursorPos(oldCursor);
         }

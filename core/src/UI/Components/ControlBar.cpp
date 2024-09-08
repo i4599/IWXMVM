@@ -33,7 +33,6 @@ namespace IWXMVM::UI
 
         ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 12.0f);
         ImGui::PushStyleVar(ImGuiStyleVar_GrabRounding, 16.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 2.0f);
 
         float width = Manager::GetWindowSizeX() / 2.4f;
         float height = Manager::GetWindowSizeY() / 8.8f;
@@ -151,6 +150,6 @@ namespace IWXMVM::UI
         }
         ImGui::End();
 
-        ImGui::PopStyleVar(3);
+        ImGui::PopStyleVar(2);
     }
 }  // namespace IWXMVM::UI

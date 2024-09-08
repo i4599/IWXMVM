@@ -143,7 +143,7 @@ namespace IWXMVM::UI
         style.PopupBorderSize = 0.0f;
         style.FramePadding = {};
         style.FrameRounding = 0.0f;
-        style.FrameBorderSize = 0.0f;
+        style.FrameBorderSize = 2.0f;
         style.ItemSpacing = {};
         style.ItemInnerSpacing = {};
         style.CellPadding = {};
@@ -161,7 +161,7 @@ namespace IWXMVM::UI
         style.Colors[ImGuiCol_WindowBg] = {0.04f, 0.04f, 0.04f, 1.00f};
         style.Colors[ImGuiCol_ChildBg] = {0.00f, 0.00f, 0.00f, 0.00f};
         style.Colors[ImGuiCol_PopupBg] = {0.19f, 0.19f, 0.19f, 0.92f};
-        style.Colors[ImGuiCol_Border] = {0.19f, 0.19f, 0.19f, 0.29f};
+        style.Colors[ImGuiCol_Border] = {0.22f, 0.22f, 0.22f, 1.0f};
         style.Colors[ImGuiCol_BorderShadow] = {0.00f, 0.00f, 0.00f, 0.24f};
         style.Colors[ImGuiCol_FrameBg] = {0.12f, 0.12f, 0.12f, 1.00f};
         style.Colors[ImGuiCol_FrameBgHovered] = {0.19f, 0.19f, 0.19f, 1.00f};
@@ -183,7 +183,7 @@ namespace IWXMVM::UI
         style.Colors[ImGuiCol_Header] = {0.00f, 0.00f, 0.00f, 1.00f};
         style.Colors[ImGuiCol_HeaderHovered] = {0.3f, 0.3f, 0.3f, 1.00f};
         style.Colors[ImGuiCol_HeaderActive] = {0.20f, 0.22f, 0.23f, 0.33f};
-        style.Colors[ImGuiCol_Separator] = {0.28f, 0.28f, 0.28f, 0.29f};
+        style.Colors[ImGuiCol_Separator] = {0.28f, 0.28f, 0.28f, 1.00f};
         style.Colors[ImGuiCol_SeparatorHovered] = {0.8f, 0.8f, 0.8f, 0.29f};
         style.Colors[ImGuiCol_SeparatorActive] = {0.40f, 0.44f, 0.47f, 1.00f};
         style.Colors[ImGuiCol_ResizeGrip] = {0.28f, 0.28f, 0.28f, 0.29f};
