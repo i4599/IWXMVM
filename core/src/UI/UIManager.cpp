@@ -13,6 +13,7 @@
 #include "Utilities/MathUtils.hpp"
 #include "UI/Animations.hpp"
 #include "UI/Blur.hpp"
+#include "UI/Components/CaptureMenu.hpp"
 #include "UI/Components/ControlBar.hpp"
 #include "UI/Components/DemoLoader.hpp"
 #include "UI/Components/KeyframeEditor.hpp"
@@ -385,10 +386,12 @@ namespace IWXMVM::UI
                 if (Mod::GetGameInterface()->GetGameState() == Types::GameState::InDemo)
                 {
                     Tabs::Add(ICON_FA_SUN, VisualsMenu::GetShowPtr());
+                    Tabs::Add(ICON_FA_CIRCLE, CaptureMenu::GetShowPtr());
                 }
                 else
                 {
                     *VisualsMenu::GetShowPtr() = false;
+                    *CaptureMenu::GetShowPtr() = false;
                 }
 
                 Tabs::Render();
@@ -396,6 +399,7 @@ namespace IWXMVM::UI
                 ControlBar::Render(KeyframeEditor::Render());
                 DemoLoader::Render();
                 VisualsMenu::Render();
+                CaptureMenu::Render();
             }
 
             // Notifications should be displayed regardless of whether the UI is shown or not

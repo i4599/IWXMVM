@@ -1,5 +1,6 @@
 #pragma once
 #include "Camera.hpp"
+#include "Types/RenderingFlags.hpp"
 
 namespace IWXMVM::Components
 {
@@ -38,6 +39,21 @@ namespace IWXMVM::Components
         Count
     };
 
+    enum class PassType
+    {
+        Default,
+        Depth,
+        Normal,
+        Count
+    };
+
+    struct PassData
+    {
+        PassType type;
+        Types::RenderingFlags renderingFlags;
+        std::string name;
+    };
+
     struct CaptureSettings
     {
         uint32_t startTick, endTick;
@@ -47,6 +63,8 @@ namespace IWXMVM::Components
 
         Resolution resolution;
         int32_t framerate;
+
+        std::vector<PassData> passes;
     };
 
     class CaptureManager
