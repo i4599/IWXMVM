@@ -89,7 +89,7 @@ namespace IWXMVM::UI
 
             ImGui::PushFont(Manager::GetTQFont());
 
-            float nameTextSize = ImGui::CalcTextSize("Name").x;
+            float nameTextSize = ImGui::CalcTextSize("Filename").x;
             if (multipass)
             {
                 nameTextSize = ImGui::CalcTextSize("Directory Name").x;
@@ -102,7 +102,7 @@ namespace IWXMVM::UI
             ImGui::SetCursorPosY(ImGui::GetCursorPosY() + windowBorder * 0.45f);
             if (!multipass)
             {
-                ImGui::Text("Name");
+                ImGui::Text("Filename");
             }
             else
             {
