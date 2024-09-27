@@ -32,7 +32,7 @@ namespace IWXMVM::UI
         ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
 
         float width = Manager::GetWindowSizeX() / 5.0f;
-        float height = Manager::GetWindowSizeY() / 1.7f;
+        float height = Manager::GetWindowSizeY() / 2.5f;
         ImVec2 size = {width, height};
         ImGui::SetNextWindowSize(size, ImGuiCond_Once);
 
