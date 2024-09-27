@@ -78,10 +78,6 @@ namespace IWXMVM::UI
 
             ImGui::SetCursorPosY(ImGui::GetCursorPosY() + windowBorder * 0.8f);
             ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal, 2.0f);
-            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + windowBorder * 0.64f);
-
-            ImGui::SetCursorPosX(windowBorder);
-            ImGui::Checkbox("Multi-pass Mode", &multipass);
 
             float optionsGap = Manager::GetFontSize() * 0.2f;
             float textIndent = Manager::GetFontSize() * 0.1f;
@@ -103,7 +99,7 @@ namespace IWXMVM::UI
             float framerateTextSize = ImGui::CalcTextSize("Framerate").x;
 
             ImGui::SetCursorPosX(windowBorder + textIndent);
-            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + Manager::GetTQFontSize() * 0.45f);
+            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + windowBorder * 0.45f);
             if (!multipass)
             {
                 ImGui::Text("Name");
@@ -239,12 +235,16 @@ namespace IWXMVM::UI
             ImGui::SetNextItemWidth(timeframeSize);
             ImGui::SliderInt("##End", reinterpret_cast<std::int32_t*>(&captureSettings.endTick), 0, endTick);
 
+            ImGui::SetCursorPosX(windowBorder);
+            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + windowBorder * 0.6f);
+            ImGui::Checkbox("Multi-pass Mode", &multipass);
+
             ImVec2 captureButtonPos = {0.0f, size.y - Manager::GetFontSize() * 1.6f};
             ImVec2 captureButtonSize = {size.x, size.y - captureButtonPos.y};
 
             if (multipass)
             {
-                ImGui::SetCursorPosY(ImGui::GetCursorPosY() + windowBorder * 0.8f);
+                ImGui::SetCursorPosY(ImGui::GetCursorPosY() + windowBorder * 0.6f);
                 ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal, 2.0f);
 
                 float gapBetweenPasses = windowBorder * 0.8f;
