@@ -3,35 +3,120 @@
 
 #include "MinHook.h"
 
+#include "Components/CaptureManager.hpp"
 #include "Events.hpp"
 #include "Graphics/Graphics.hpp"
-#include "Utilities/HookManager.hpp"
-#include "Utilities/PathUtils.hpp"
 #include "Mod.hpp"
-
 #include "UI/UIManager.hpp"
+#include "Utilities/HookManager.hpp"
 
 namespace IWXMVM::D3D9
 {
     HWND gameWindowHandle = nullptr;
     void* d3d9DeviceVTable[119];
-    void* d3d9SwapChainVTable[10];
     void* d3d9VTable[17];
     IDirect3DDevice9* device = nullptr;
+    IDirect3DTexture9* depthTexture = nullptr;
+    bool foundInterceptedDepthTexture = false;
+    std::uint32_t gameWidth = 0;
+    std::uint32_t gameHeight = 0;
 
     typedef HRESULT(__stdcall* EndScene_t)(IDirect3DDevice9* pDevice);
     EndScene_t EndScene;
     EndScene_t ReshadeOriginalEndScene;
     typedef HRESULT(__stdcall* Reset_t)(IDirect3DDevice9* pDevice, D3DPRESENT_PARAMETERS* pPresentationParameters);
     Reset_t Reset;
-    typedef HRESULT(__stdcall* Present_t)(IDirect3DDevice9* pDevice, const RECT* pSourceRect, const RECT* pDestRect,
-                                          HWND hDestWindowOverride, const RGNDATA* pDirtyRegion, DWORD dwFlags);
-    Present_t SwapChainPresent;
     typedef HRESULT(__stdcall* CreateDevice_t)(IDirect3D9* pInterface, UINT Adapter, D3DDEVTYPE DeviceType,
                                                HWND hFocusWindow, DWORD BehaviorFlags,
                                                D3DPRESENT_PARAMETERS* pPresentationParameters,
                                                IDirect3DDevice9** ppReturnedDeviceInterface);
     CreateDevice_t CreateDevice;
+    typedef HRESULT(__stdcall* CreateDepthStencilSurface_t)(IDirect3DDevice9* pDevice, UINT Width, UINT Height,
+                                                            D3DFORMAT Format, D3DMULTISAMPLE_TYPE MultiSample,
+                                                            DWORD MultisampleQuality, BOOL Discard,
+                                                            IDirect3DSurface9** ppSurface, HANDLE* pSharedHandle);
+    CreateDepthStencilSurface_t CreateDepthStencilSurface;
+    typedef HRESULT(__stdcall* SetDepthStencilSurface_t)(IDirect3DDevice9* pDevice, IDirect3DSurface9* pNewZStencil);
+    SetDepthStencilSurface_t SetDepthStencilSurface;
+
+    std::optional<void*> reshadeEndSceneAddress;
+    bool IsReshadePresent()
+    {
+        return reshadeEndSceneAddress.has_value();
+    }
+
+    HRESULT __stdcall CreateDepthStencilSurface_Hook(IDirect3DDevice9* pDevice, UINT Width, UINT Height,
+                                                     D3DFORMAT Format, D3DMULTISAMPLE_TYPE MultiSample,
+                                                     DWORD MultisampleQuality, BOOL Discard,
+                                                     IDirect3DSurface9** ppSurface, HANDLE* pSharedHandle)
+    {
+        if (MultiSample == D3DMULTISAMPLE_NONE && Width == gameWidth && Height == gameHeight)
+        {
+            LOG_DEBUG("Intercepting depth stencil surface creation");
+
+            HRESULT hr = depthTexture->GetSurfaceLevel(0, ppSurface);
+            if (SUCCEEDED(hr))
+            {
+                LOG_DEBUG("Successfully changed depth stencil format");
+            }
+            else
+            {
+                LOG_DEBUG("Failed to get surface from depth texture");
+                return CreateDepthStencilSurface(pDevice, Width, Height, Format, MultiSample, MultisampleQuality,
+                                                 Discard, ppSurface, pSharedHandle);
+            }
+
+            return hr;
+        }
+
+        return CreateDepthStencilSurface(pDevice, Width, Height, Format, MultiSample, MultisampleQuality, Discard,
+                                         ppSurface, pSharedHandle);
+    }
+
+    HRESULT __stdcall CreateDevice_Hook(IDirect3D9* pInterface, UINT Adapter, D3DDEVTYPE DeviceType, HWND hFocusWindow,
+                                        DWORD BehaviorFlags, D3DPRESENT_PARAMETERS* pPresentationParameters,
+                                        IDirect3DDevice9** ppReturnedDeviceInterface)
+    {
+        LOG_DEBUG("CreateDevice called with hwnd {0:x}", (std::uintptr_t)pPresentationParameters->hDeviceWindow);
+
+        GFX::GraphicsManager::Get().Uninitialize();
+        UI::Manager::Shutdown();
+        if (depthTexture)
+        {
+            depthTexture->Release();
+            depthTexture = nullptr;
+        }
+        foundInterceptedDepthTexture = false;
+
+        HRESULT hr = CreateDevice(pInterface, Adapter, DeviceType, hFocusWindow, BehaviorFlags, pPresentationParameters,
+                                  ppReturnedDeviceInterface);
+        if (FAILED(hr))
+        {
+            return hr;
+        }
+
+        gameWidth = pPresentationParameters->BackBufferWidth;
+        gameHeight = pPresentationParameters->BackBufferHeight;
+
+        device = *ppReturnedDeviceInterface;
+
+        if (!reshadeEndSceneAddress.has_value())
+        {
+            hr = device->CreateTexture(gameWidth, gameHeight, 1, D3DUSAGE_DEPTHSTENCIL,
+                                       static_cast<D3DFORMAT>(MAKEFOURCC('I', 'N', 'T', 'Z')), D3DPOOL_DEFAULT,
+                                       &depthTexture, nullptr);
+            if (FAILED(hr))
+            {
+                LOG_ERROR("Failed to create depth texture");
+            }
+        }
+
+        UI::Manager::Initialize(device, pPresentationParameters->hDeviceWindow,
+                                {static_cast<float>(gameWidth), static_cast<float>(gameHeight)});
+        GFX::GraphicsManager::Get().Initialize();
+
+        return hr;
+    }
 
     bool CheckForOverlays(std::uintptr_t returnAddress)
     {
@@ -83,37 +168,8 @@ namespace IWXMVM::D3D9
         }
     }
 
-    HRESULT __stdcall CreateDevice_Hook(IDirect3D9* pInterface, UINT Adapter, D3DDEVTYPE DeviceType, HWND hFocusWindow,
-                                        DWORD BehaviorFlags, D3DPRESENT_PARAMETERS* pPresentationParameters,
-                                        IDirect3DDevice9** ppReturnedDeviceInterface)
-    {
-        LOG_DEBUG("CreateDevice called with hwnd {0:x}", (std::uintptr_t)pPresentationParameters->hDeviceWindow);
-
-        GFX::GraphicsManager::Get().Uninitialize();
-        UI::Manager::Shutdown();
-
-        HRESULT hr = CreateDevice(pInterface, Adapter, DeviceType, hFocusWindow, BehaviorFlags, pPresentationParameters,
-                                  ppReturnedDeviceInterface);
-        if (hr != D3D_OK)
-        {
-            return hr;
-        }
-
-        device = *ppReturnedDeviceInterface;
-
-        UI::Manager::Initialize(device, pPresentationParameters->hDeviceWindow, GetBackBufferSize(device));
-        GFX::GraphicsManager::Get().Initialize();
-
-        return hr;
-    }
-
-    std::optional<void*> reshadeEndSceneAddress;
-    bool IsReshadePresent()
-    {
-        return reshadeEndSceneAddress.has_value();
-    }
-
-    std::size_t reshadeEndSceneCallCount;
+    bool calledByEndscene = false;
+    bool capturedAlready = false;
     HRESULT __stdcall EndScene_Hook(IDirect3DDevice9* pDevice)
     {
         const std::uintptr_t returnAddress = reinterpret_cast<std::uintptr_t>(_ReturnAddress());
@@ -125,8 +181,36 @@ namespace IWXMVM::D3D9
         if (!UI::Manager::IsInitialized())
         {
             device = pDevice;
-            UI::Manager::Initialize(pDevice, FindWindowHandle(), GetBackBufferSize(device));
+            UI::Manager::Initialize(pDevice, FindWindowHandle(), GetBackBufferSize(pDevice));
             GFX::GraphicsManager::Get().Initialize();
+        }
+
+        capturedAlready = false;
+        if (Components::CaptureManager::Get().IsCapturing())
+        {
+            if (IsReshadePresent())
+            {
+                if (Components::CaptureManager::Get().MultiPassEnabled() &&
+                    !Components::CaptureManager::Get().GetCurrentPass().useReshade)
+                {
+                    capturedAlready = true;
+                    if (Components::CaptureManager::Get().IsFramePrepared())
+                    {
+                        Components::CaptureManager::Get().CaptureFrame();
+                    }
+
+                    Components::CaptureManager::Get().PrepareFrame();
+                }
+            }
+            else
+            {
+                if (Components::CaptureManager::Get().IsFramePrepared())
+                {
+                    Components::CaptureManager::Get().CaptureFrame();
+                }
+
+                Components::CaptureManager::Get().PrepareFrame();
+            }
         }
 
         if (Mod::GetGameInterface()->GetGameState() == Types::GameState::InDemo)
@@ -139,17 +223,31 @@ namespace IWXMVM::D3D9
             UI::Manager::Frame();
         }
 
+        calledByEndscene = true;
         return EndScene(pDevice);
     }
 
     // This is only called if reshade is present
     HRESULT __stdcall ReshadeOriginalEndScene_Hook(IDirect3DDevice9* pDevice)
     {
-        if (reshadeEndSceneCallCount > 0)
+        if (calledByEndscene)
         {
+            calledByEndscene = false;
             return ReshadeOriginalEndScene(pDevice);
         }
-        ++reshadeEndSceneCallCount;
+
+        if (Components::CaptureManager::Get().IsCapturing() &&
+            (!Components::CaptureManager::Get().MultiPassEnabled() ||
+             Components::CaptureManager::Get().GetCurrentPass().useReshade) &&
+            !capturedAlready)
+        {
+            if (Components::CaptureManager::Get().IsFramePrepared())
+            {
+                Components::CaptureManager::Get().CaptureFrame();
+            }
+
+            Components::CaptureManager::Get().PrepareFrame();
+        }
 
         UI::Manager::Frame();
         return ReshadeOriginalEndScene(pDevice);
@@ -157,14 +255,11 @@ namespace IWXMVM::D3D9
 
     HRESULT __stdcall Reset_Hook(IDirect3DDevice9* pDevice, D3DPRESENT_PARAMETERS* pPresentationParameters)
     {
-
         GFX::GraphicsManager::Get().Uninitialize();
 
         ImGui_ImplDX9_InvalidateDeviceObjects();
         HRESULT hr = Reset(pDevice, pPresentationParameters);
         ImGui_ImplDX9_CreateDeviceObjects();
-
-        // do we need to re-initialize the UI components?
 
         if (UI::Manager::IsInitialized())
         {
@@ -174,82 +269,46 @@ namespace IWXMVM::D3D9
         return hr;
     }
 
-    HRESULT __stdcall SwapChainPresent_Hook(IDirect3DDevice9* pDevice, const RECT* pSourceRect, const RECT* pDestRect,
-                                   HWND hDestWindowOverride, const RGNDATA* pDirtyRegion, DWORD dwFlags)
+    HRESULT __stdcall SetDepthStencilSurface_Hook(IDirect3DDevice9* pDevice, IDirect3DSurface9* pNewZStencil)
     {
-        reshadeEndSceneCallCount = 0;
-        return SwapChainPresent(pDevice, pSourceRect, pDestRect, hDestWindowOverride, pDirtyRegion, dwFlags);
+        HRESULT hr = SetDepthStencilSurface(pDevice, pNewZStencil);
+        if (!IsReshadePresent() || foundInterceptedDepthTexture || !pNewZStencil)
+        {
+            return hr;
+        }
+
+        D3DSURFACE_DESC surfaceDesc = {};
+        pNewZStencil->GetDesc(&surfaceDesc);
+
+        if (surfaceDesc.MultiSampleType == D3DMULTISAMPLE_NONE &&
+            surfaceDesc.Format == static_cast<D3DFORMAT>(MAKEFOURCC('I', 'N', 'T', 'Z')))
+        {
+            foundInterceptedDepthTexture = true;
+            LOG_DEBUG("Found intercepted depth texture");
+
+            HRESULT result = pNewZStencil->GetContainer(IID_IDirect3DTexture9, reinterpret_cast<void**>(&depthTexture));
+            if (FAILED(result))
+            {
+                LOG_ERROR("Failed to get parent texture from intercepted surface");
+                return hr;
+            }
+        }
+
+        return hr;
     }
 
     void CheckPresenceReshade()
     {
-        auto IsReshadeDllPresent = [](auto dllName) {
-            const std::filesystem::path gamePath(PathUtils::GetCurrentGameDirectory());
-            const auto reshadePath = gamePath / dllName;
-            if (!std::filesystem::exists(reshadePath))
-            {
-                return false;
-            }
-
-            bool found = false;
-            HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
-            if (SUCCEEDED(hr))
-            {
-                IShellItem2* pShellItem;
-                hr = SHCreateItemFromParsingName(reshadePath.wstring().c_str(), nullptr, IID_PPV_ARGS(&pShellItem));
-                if (SUCCEEDED(hr))
-                {
-                    LPWSTR fileDesc = nullptr;
-                    hr = pShellItem->GetString(PKEY_FileDescription, &fileDesc);
-                    if (SUCCEEDED(hr))
-                    {
-                        if (std::wstring_view(fileDesc).find(L"ReShade"))
-                        {
-                            found = true;
-                        }
-                        CoTaskMemFree(fileDesc);
-                    }
-                    pShellItem->Release();
-                }
-                CoUninitialize();
-            }
-
-            return found;
-        };
-
-        bool reshadeFound = IsReshadeDllPresent("d3d9.dll") ||
-                            IsReshadeDllPresent("dxgi.dll");
-
         auto device = Mod::GetGameInterface()->GetGameDevicePtr();
         auto vTable = *reinterpret_cast<void***>(device);
         auto orgEndScene = vTable[42];
 
-        if (reshadeFound && orgEndScene != d3d9DeviceVTable[42])
+        if (orgEndScene != d3d9DeviceVTable[42])
         {
             LOG_DEBUG("Detected Reshade presence; original EndScene address is {}, Reshade EndScene address is {}.",
                       orgEndScene, d3d9DeviceVTable[42]);
 
             reshadeEndSceneAddress = std::exchange(d3d9DeviceVTable[42], orgEndScene);
-        }
-    }
-
-    void FindSwapChain()
-    {
-        const auto device = Mod::GetGameInterface()->GetGameDevicePtr();
-
-        IDirect3DSwapChain9* pSwapChain = nullptr;
-        const HRESULT hr = device->GetSwapChain(0, &pSwapChain);
-
-        if (FAILED(hr) || !pSwapChain)
-        {
-            throw std::runtime_error("Failed to find D3D9 SwapChain!");
-        }
-        else
-        {
-            memcpy(d3d9SwapChainVTable, *(void**)pSwapChain, 10 * sizeof(void*));
-            pSwapChain->Release();
-
-            LOG_DEBUG("Found D3D9 SwapChain Present address: {}", d3d9SwapChainVTable[3]);
         }
     }
 
@@ -295,15 +354,17 @@ namespace IWXMVM::D3D9
             throw std::runtime_error("Failed to initialize MinHook");
         }
 
+        HookManager::CreateHook((std::uintptr_t)d3d9DeviceVTable[29], (std::uintptr_t)CreateDepthStencilSurface_Hook,
+                                (std::uintptr_t*)&CreateDepthStencilSurface);
         HookManager::CreateHook((std::uintptr_t)d3d9VTable[16], (std::uintptr_t)CreateDevice_Hook,
                                 (std::uintptr_t*)&CreateDevice);
-        HookManager::CreateHook((std::uintptr_t)d3d9DeviceVTable[16], (std::uintptr_t)Reset_Hook,
-                                (std::uintptr_t*)&Reset);
-        HookManager::CreateHook((std::uintptr_t)d3d9SwapChainVTable[3], (std::uintptr_t)SwapChainPresent_Hook,
-                                (std::uintptr_t*)&SwapChainPresent);
         HookManager::CreateHook((std::uintptr_t)d3d9DeviceVTable[42], (std::uintptr_t)EndScene_Hook,
                                 (std::uintptr_t*)&EndScene);
-        
+        HookManager::CreateHook((std::uintptr_t)d3d9DeviceVTable[16], (std::uintptr_t)Reset_Hook,
+                                (std::uintptr_t*)&Reset);
+        HookManager::CreateHook((std::uintptr_t)d3d9DeviceVTable[39], (std::uintptr_t)SetDepthStencilSurface_Hook,
+                                (std::uintptr_t*)&SetDepthStencilSurface);
+
         if (reshadeEndSceneAddress.has_value())
         {
             HookManager::CreateHook((std::uintptr_t)reshadeEndSceneAddress.value(),
@@ -314,10 +375,15 @@ namespace IWXMVM::D3D9
 
     void Initialize()
     {
-        FindSwapChain();
         CreateDummyDevice();
         Hook();
         LOG_DEBUG("Hooked D3D9");
+
+        if (!IsReshadePresent())
+        {
+            LOG_DEBUG("Triggering vid_restart since Reshade is not present");
+            Mod::GetGameInterface()->Vid_Restart();
+        }
     }
 
     HWND FindWindowHandle()
@@ -344,6 +410,11 @@ namespace IWXMVM::D3D9
     IDirect3DDevice9* GetDevice()
     {
         return device;
+    }
+
+    IDirect3DTexture9* GetDepthTexture()
+    {
+        return depthTexture;
     }
 
     bool CaptureBackBuffer(IDirect3DTexture9* texture)

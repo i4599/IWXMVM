@@ -1,62 +1,65 @@
 #include "StdInclude.hpp"
-
 #include "Graphics.hpp"
 
-#include "UI/UIManager.hpp"
 #include "Components/CameraManager.hpp"
 #include "Components/CampathManager.hpp"
 #include "Graphics/Resource.hpp"
 #include "Input.hpp"
 #include "Mod.hpp"
 #include "Types/Vertex.hpp"
+#include "UI/Components/CaptureMenu.hpp"
+#include "UI/UIManager.hpp"
 #include "Utilities/MathUtils.hpp"
 
 INCBIN_EXTERN(VERTEX_SHADER);
 INCBIN_EXTERN(PIXEL_SHADER);
+INCBIN_EXTERN(DEPTH_VERTEX_SHADER);
+INCBIN_EXTERN(DEPTH_PIXEL_SHADER);
 
 namespace IWXMVM::GFX
 {
-    void GraphicsManager::Initialize()
+    void GraphicsManager::CreateGraphicsResources()
     {
         IDirect3DDevice9* device = D3D9::GetDevice();
+        HRESULT hr = D3D_OK;
+
         ID3DXBuffer* errorMessageBuffer = nullptr;
 
         ID3DXBuffer* vertexShaderBuffer = nullptr;
-        HRESULT result = D3DXCompileShader((LPCSTR)VERTEX_SHADER_data, VERTEX_SHADER_size, nullptr, NULL, "main",
-                                           "vs_3_0",
-                                           NULL,
-                                   &vertexShaderBuffer, &errorMessageBuffer, nullptr);
-        if (result != D3D_OK)
+        hr = D3DXCompileShader((LPCSTR)VERTEX_SHADER_data, VERTEX_SHADER_size, nullptr, NULL, "main", "vs_3_0", NULL,
+                               &vertexShaderBuffer, &errorMessageBuffer, nullptr);
+        if (FAILED(hr))
         {
             LOG_ERROR("Failed to compile vertex shader: {}",
                       reinterpret_cast<const char*>(errorMessageBuffer->GetBufferPointer()));
             errorMessageBuffer->Release();
             return;
         }
-
-        result = device->CreateVertexShader(reinterpret_cast<const DWORD*>(vertexShaderBuffer->GetBufferPointer()),
-                                            &vertexShader);
-        if (result != D3D_OK)
+        hr = device->CreateVertexShader(reinterpret_cast<const DWORD*>(vertexShaderBuffer->GetBufferPointer()),
+                                        &vertexShader);
+        if (FAILED(hr))
         {
             LOG_ERROR("Failed to create vertex shader");
         }
+        vertexShaderBuffer->Release();
 
         ID3DXBuffer* pixelShaderBuffer = nullptr;
-        result = D3DXCompileShader((LPCSTR)PIXEL_SHADER_data, PIXEL_SHADER_size, nullptr, NULL, "main", "ps_3_0",
-                                           NULL, &pixelShaderBuffer, &errorMessageBuffer, nullptr);
-        if (result != D3D_OK)
+        hr = D3DXCompileShader((LPCSTR)PIXEL_SHADER_data, PIXEL_SHADER_size, nullptr, NULL, "main", "ps_3_0", NULL,
+                               &pixelShaderBuffer, &errorMessageBuffer, nullptr);
+        if (FAILED(hr))
         {
             LOG_ERROR("Failed to compile pixel shader: {}",
                       reinterpret_cast<const char*>(errorMessageBuffer->GetBufferPointer()));
             errorMessageBuffer->Release();
             return;
         }
-        result = device->CreatePixelShader(reinterpret_cast<const DWORD*>(pixelShaderBuffer->GetBufferPointer()),
-                                           &pixelShader);
-        if (result != D3D_OK)
+        hr = device->CreatePixelShader(reinterpret_cast<const DWORD*>(pixelShaderBuffer->GetBufferPointer()),
+                                       &pixelShader);
+        if (FAILED(hr))
         {
             LOG_ERROR("Failed to create pixel shader");
         }
+        pixelShaderBuffer->Release();
 
         D3DVERTEXELEMENT9 decl[] = {
             {0, offsetof(Types::Vertex, pos), D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_POSITION, 0},
@@ -64,11 +67,115 @@ namespace IWXMVM::GFX
             {0, offsetof(Types::Vertex, col), D3DDECLTYPE_D3DCOLOR, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_COLOR, 0},
             D3DDECL_END(),
         };
-        result = device->CreateVertexDeclaration(decl, &vertexDeclaration);
-        if (result != D3D_OK)
+        hr = device->CreateVertexDeclaration(decl, &vertexDeclaration);
+        if (FAILED(hr))
         {
             LOG_ERROR("Failed to create vertex declaration");
         }
+    }
+    void GraphicsManager::DestroyGraphicsResources()
+    {
+        if (vertexDeclaration != nullptr)
+        {
+            vertexDeclaration->Release();
+            vertexDeclaration = nullptr;
+        }
+        if (pixelShader != nullptr)
+        {
+            pixelShader->Release();
+            pixelShader = nullptr;
+        }
+        if (vertexShader != nullptr)
+        {
+            vertexShader->Release();
+            vertexShader = nullptr;
+        }
+    }
+
+    void GraphicsManager::CreateDepthPassResources()
+    {
+        IDirect3DDevice9* device = D3D9::GetDevice();
+        HRESULT hr = D3D_OK;
+
+        constexpr Types::FSVertex squareData[] = {
+            {{-1.0f, 1.0f, 0.0f}, {0.0f, 0.0f}}, {{-1.0f, -1.0f, 0.0f}, {0.0f, 1.0f}},
+            {{1.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},  {{-1.0f, -1.0f, 0.0f}, {0.0f, 1.0f}},
+            {{1.0f, -1.0f, 0.0f}, {1.0f, 1.0f}}, {{1.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
+        };
+
+        hr = device->CreateVertexBuffer(sizeof(squareData), D3DUSAGE_WRITEONLY, NULL, D3DPOOL_DEFAULT,
+                                        &depthPassVertices, nullptr);
+        if (FAILED(hr))
+        {
+            LOG_ERROR("Failed to create depth pass vertex buffer");
+        }
+
+        void* tmp = nullptr;
+        depthPassVertices->Lock(0, sizeof(squareData), &tmp, NULL);
+        std::memcpy(tmp, squareData, sizeof(squareData));
+        depthPassVertices->Unlock();
+
+        D3DVERTEXELEMENT9 decl[] = {
+            {0, offsetof(Types::FSVertex, p), D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_POSITION, 0},
+            {0, offsetof(Types::FSVertex, uv), D3DDECLTYPE_FLOAT2, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TEXCOORD, 0},
+            D3DDECL_END(),
+        };
+        hr = device->CreateVertexDeclaration(decl, &depthPassVDecl);
+        if (FAILED(hr))
+        {
+            LOG_ERROR("Failed to create depth pass vertex declaration");
+        }
+
+        ID3DXBuffer* errorMessageBuffer = nullptr;
+
+        ID3DXBuffer* vertexShaderBuffer = nullptr;
+        hr = D3DXCompileShader((LPCSTR)DEPTH_VERTEX_SHADER_data, DEPTH_VERTEX_SHADER_size, nullptr, NULL, "main",
+                               "vs_3_0", NULL, &vertexShaderBuffer, &errorMessageBuffer, nullptr);
+        if (FAILED(hr))
+        {
+            LOG_ERROR("Failed to compile depth vertex shader: {}",
+                      reinterpret_cast<const char*>(errorMessageBuffer->GetBufferPointer()));
+            errorMessageBuffer->Release();
+            return;
+        }
+        hr = device->CreateVertexShader(reinterpret_cast<const DWORD*>(vertexShaderBuffer->GetBufferPointer()),
+                                        &depthPassVS);
+        if (FAILED(hr))
+        {
+            LOG_ERROR("Failed to create depth pass vertex shader");
+        }
+        vertexShaderBuffer->Release();
+
+        ID3DXBuffer* pixelShaderBuffer = nullptr;
+        hr = D3DXCompileShader((LPCSTR)DEPTH_PIXEL_SHADER_data, DEPTH_PIXEL_SHADER_size, nullptr, NULL, "main",
+                               "ps_3_0", NULL, &pixelShaderBuffer, &errorMessageBuffer, nullptr);
+        if (FAILED(hr))
+        {
+            LOG_ERROR("Failed to compile depth pixel shader: {}",
+                      reinterpret_cast<const char*>(errorMessageBuffer->GetBufferPointer()));
+            errorMessageBuffer->Release();
+            return;
+        }
+        hr = device->CreatePixelShader(reinterpret_cast<const DWORD*>(pixelShaderBuffer->GetBufferPointer()),
+                                       &depthPassPS);
+        if (FAILED(hr))
+        {
+            LOG_ERROR("Failed to create depth pass pixel shader");
+        }
+        pixelShaderBuffer->Release();
+    }
+    void GraphicsManager::DestroyDepthPassResources()
+    {
+        depthPassPS->Release();
+        depthPassVS->Release();
+        depthPassVDecl->Release();
+        depthPassVertices->Release();
+    }
+
+    void GraphicsManager::Initialize()
+    {
+        CreateGraphicsResources();
+        CreateDepthPassResources();
 
         BufferManager::Get().Initialize();
 
@@ -99,22 +206,9 @@ namespace IWXMVM::GFX
 
     void GraphicsManager::Uninitialize()
     {
-        if (vertexDeclaration != nullptr)
-        {
-            vertexDeclaration->Release();
-            vertexDeclaration = nullptr;
-        }
-        if (pixelShader != nullptr)
-        {
-            pixelShader->Release();
-            pixelShader = nullptr;
-        }
-        if (vertexShader != nullptr)
-        {
-            vertexShader->Release();
-            vertexShader = nullptr;
-        }
         BufferManager::Get().Uninitialize();
+        DestroyDepthPassResources();
+        DestroyGraphicsResources();
     }
 
     glm::mat4 GetViewMatrix()
@@ -198,7 +292,6 @@ namespace IWXMVM::GFX
         device->SetVertexShaderConstantF(0, reinterpret_cast<const float*>(&viewProjectionMatrix), 4);
         device->SetVertexShader(vertexShader);
 
-
         const auto& camera = Components::CameraManager::Get().GetActiveCamera();
         const auto sun = Mod::GetGameInterface()->GetSun();
         const auto filmtweaks = Mod::GetGameInterface()->GetFilmtweaks();
@@ -234,12 +327,8 @@ namespace IWXMVM::GFX
     {
         ImVec2 viewportSize = UI::Manager::GetWindowSize();
 
-        glm::vec4 mouseClipSpace(
-            1.0f - mousePos.x / viewportSize.x * 2.0f,
-            1.0f - (viewportSize.y - mousePos.y) / viewportSize.y * 2.0f,
-            -1.0f,
-            1.0f
-        );
+        glm::vec4 mouseClipSpace(1.0f - mousePos.x / viewportSize.x * 2.0f,
+                                 1.0f - (viewportSize.y - mousePos.y) / viewportSize.y * 2.0f, -1.0f, 1.0f);
 
         glm::vec4 mouseViewSpace = glm::inverse(projection) * mouseClipSpace;
         mouseViewSpace.z = -1.0f;
@@ -260,12 +349,12 @@ namespace IWXMVM::GFX
         for (size_t i = 0; i < mesh.indices.size(); i += 3)
         {
             const auto i1 = mesh.indices[i];
-            const auto i2 = mesh.indices[i+1];
-            const auto i3 = mesh.indices[i+2];
+            const auto i2 = mesh.indices[i + 1];
+            const auto i3 = mesh.indices[i + 2];
             const auto a = glm::vec3(model * glm::vec4(mesh.vertices[i1].pos, 1.0f));
             const auto b = glm::vec3(model * glm::vec4(mesh.vertices[i2].pos, 1.0f));
             const auto c = glm::vec3(model * glm::vec4(mesh.vertices[i3].pos, 1.0f));
-            
+
             glm::vec2 baryPosition;
             float distance = 0;
             if (glm::intersectRayTriangle(camera->GetPosition(), glm::normalize(mouseRayDirection), a, b, c,
@@ -285,16 +374,17 @@ namespace IWXMVM::GFX
         const auto mouseRayDirection = GetMouseRay(mousePos, projection, view);
 
         float distance;
-        return glm::intersectRaySphere(camera->GetPosition(), glm::normalize(mouseRayDirection), pos, radius * radius, distance);
+        return glm::intersectRaySphere(camera->GetPosition(), glm::normalize(mouseRayDirection), pos, radius * radius,
+                                       distance);
     }
-    
+
     void GraphicsManager::DrawGizmoComponent(Mesh& mesh, glm::mat4 model, int32_t axisIndex)
     {
         if (heldAxis.has_value() && heldAxis.value().axisIndex != axisIndex)
         {
             return;
         }
-        
+
         if (!objectHoveredThisFrame)
         {
             bool mouseIntersects = MouseIntersects(ImGui::GetIO().MousePos, mesh, model);
@@ -311,7 +401,6 @@ namespace IWXMVM::GFX
         device->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
     }
 
-    
     std::optional<glm::vec3> GetMousePositionOnPlane(glm::vec3 origin, glm::vec3 normal)
     {
         auto& camera = Components::CameraManager::Get().GetActiveCamera();
@@ -329,8 +418,7 @@ namespace IWXMVM::GFX
         return std::nullopt;
     }
 
-    void GraphicsManager::DrawTranslationGizmo(glm::vec3& position, glm::mat4 translation,
-                                               glm::mat4 rotation)
+    void GraphicsManager::DrawTranslationGizmo(glm::vec3& position, glm::mat4 translation, glm::mat4 rotation)
     {
         auto scaledModel = translation * rotation * glm::scale(glm::vec3(1, 1, 1) * 3);
 
@@ -378,7 +466,7 @@ namespace IWXMVM::GFX
             auto intersection = GetMousePositionOnPlane(position, bestPlaneNormal);
             if (intersection.has_value())
             {
-                if (!isHeld) 
+                if (!isHeld)
                 {
                     // store offset to account for the distance between object position and mouse position,
                     // so that the object moves relative to the mouse cursor
@@ -398,9 +486,8 @@ namespace IWXMVM::GFX
 
     void GraphicsManager::DrawRotationGizmo(glm::vec3& rotation, glm::mat4 translation)
     {
-        const auto rotate = glm::eulerAngleZYX(
-            glm::radians(rotation.y), glm::radians(rotation.x), glm::radians(rotation.z)
-        );
+        const auto rotate =
+            glm::eulerAngleZYX(glm::radians(rotation.y), glm::radians(rotation.x), glm::radians(rotation.z));
         const auto scaledModel = translation * rotate * glm::scale(glm::vec3(1, 1, 1) * 3);
 
         if (Input::KeyUp(ImGuiKey_MouseLeft))
@@ -462,36 +549,24 @@ namespace IWXMVM::GFX
                 const auto interpValue = keyframeManager.Get().Interpolate(property, interpTick);
 
                 campath.vertices.push_back(
-                    Types::Vertex{
-                        .pos = interpValue.cameraData.position - glm::vec3(lineWidth / 2, 0, 0),
-                        .normal = glm::vec3(0, 0, 1),
-                        .col = lineColor
-                    }
-                );
+                    Types::Vertex{.pos = interpValue.cameraData.position - glm::vec3(lineWidth / 2, 0, 0),
+                                  .normal = glm::vec3(0, 0, 1),
+                                  .col = lineColor});
 
                 campath.vertices.push_back(
-                    Types::Vertex{
-                        .pos = interpValue.cameraData.position + glm::vec3(lineWidth / 2, 0, 0),
-                        .normal = glm::vec3(0, 0, 1),
-                        .col = lineColor
-                    }
-                );
+                    Types::Vertex{.pos = interpValue.cameraData.position + glm::vec3(lineWidth / 2, 0, 0),
+                                  .normal = glm::vec3(0, 0, 1),
+                                  .col = lineColor});
 
                 campath.vertices.push_back(
-                    Types::Vertex{
-                        .pos = interpValue.cameraData.position - glm::vec3(0, 0, lineWidth / 4),
-                        .normal = glm::vec3(1, 1, 0),
-                        .col = lineColor
-                    }
-                );
+                    Types::Vertex{.pos = interpValue.cameraData.position - glm::vec3(0, 0, lineWidth / 4),
+                                  .normal = glm::vec3(1, 1, 0),
+                                  .col = lineColor});
 
                 campath.vertices.push_back(
-                    Types::Vertex{
-                        .pos = interpValue.cameraData.position + glm::vec3(0, 0, lineWidth / 4),
-                        .normal = glm::vec3(1, 1, 0),
-                        .col = lineColor
-                    }
-                );
+                    Types::Vertex{.pos = interpValue.cameraData.position + glm::vec3(0, 0, lineWidth / 4),
+                                  .normal = glm::vec3(1, 1, 0),
+                                  .col = lineColor});
 
                 if (campath.vertices.size() > 4)
                 {
@@ -503,27 +578,11 @@ namespace IWXMVM::GFX
                     //    6
                     // 4     5
                     //    7
-                    // and so on, which means we need these indices to create the triangles between the left/right vertices:
-                    // 0 1 4
-                    // 1 5 4
-                    // 0 4 1
-                    // 1 4 5
-                    // and these for the up/down vertices:
-                    // 2 3 6
-                    // 3 7 6
-                    // 2 6 3
-                    // 3 6 7
+                    // and so on, which means we need these indices to create the triangles between the left/right
+                    // vertices: 0 1 4 1 5 4 0 4 1 1 4 5 and these for the up/down vertices: 2 3 6 3 7 6 2 6 3 3 6 7
 
-                    std::vector<Types::Index> newIndices{
-                        0, 1, 4,
-                        1, 5, 4,
-                        0, 4, 1,
-                        1, 4, 5,
-                        2, 3, 6,
-                        3, 7, 6,
-                        2, 6, 3,
-                        3, 6, 7
-                    };
+                    std::vector<Types::Index> newIndices{0, 1, 4, 1, 5, 4, 0, 4, 1, 1, 4, 5,
+                                                         2, 3, 6, 3, 7, 6, 2, 6, 3, 3, 6, 7};
 
                     for (auto& index : newIndices)
                     {
@@ -533,6 +592,102 @@ namespace IWXMVM::GFX
                     campath.indices.insert(campath.indices.end(), newIndices.begin(), newIndices.end());
                 }
             }
+        }
+    }
+
+    void GraphicsManager::DrawStreamsShader(Components::PassType passType, bool onlyDrawViewmodel) const
+    {
+        IDirect3DDevice9* device = D3D9::GetDevice();
+        IDirect3DTexture9* depthTexture = D3D9::GetDepthTexture();
+
+        if (!depthTexture)
+        {
+            return;
+        }
+
+        IDirect3DStateBlock9* d3d9_state_block = nullptr;
+        D3DMATRIX last_world = {}, last_view = {}, last_projection = {};
+
+        // Backup the DX9 state
+        HRESULT result = device->CreateStateBlock(D3DSBT_ALL, &d3d9_state_block);
+        if (FAILED(result))
+        {
+            throw std::runtime_error("Failed to get the D3D9 state block");
+        }
+
+        device->GetTransform(D3DTS_WORLD, &last_world);
+        device->GetTransform(D3DTS_VIEW, &last_view);
+        device->GetTransform(D3DTS_PROJECTION, &last_projection);
+
+        device->SetRenderState(D3DRS_FILLMODE, D3DFILL_SOLID);
+        device->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+        device->SetRenderState(D3DRS_CULLMODE, D3DCULL_CW);
+        device->SetRenderState(D3DRS_BLENDOP, D3DBLENDOP_ADD);
+        device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
+        device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+        device->SetRenderState(D3DRS_SEPARATEALPHABLENDENABLE, TRUE);
+        device->SetRenderState(D3DRS_SRCBLENDALPHA, D3DBLEND_ONE);
+        device->SetRenderState(D3DRS_DESTBLENDALPHA, D3DBLEND_INVSRCALPHA);
+        device->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
+        device->SetRenderState(D3DRS_FOGENABLE, FALSE);
+        device->SetRenderState(D3DRS_RANGEFOGENABLE, FALSE);
+        device->SetRenderState(D3DRS_SPECULARENABLE, FALSE);
+        device->SetRenderState(D3DRS_STENCILENABLE, FALSE);
+        device->SetRenderState(D3DRS_CLIPPING, FALSE);
+        device->SetRenderState(D3DRS_LIGHTING, FALSE);
+
+        const auto identityMatrix = glm::identity<glm::mat4>();
+        device->SetTransform(D3DTS_WORLD, reinterpret_cast<const D3DMATRIX*>(&identityMatrix));
+        device->SetTransform(D3DTS_VIEW, reinterpret_cast<const D3DMATRIX*>(&identityMatrix));
+        device->SetTransform(D3DTS_PROJECTION, reinterpret_cast<const D3DMATRIX*>(&identityMatrix));
+
+        device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+        device->SetRenderState(D3DRS_ZENABLE, D3DZB_FALSE);
+        device->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+        device->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_POINT);
+        device->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_POINT);
+        device->SetSamplerState(0, D3DSAMP_MIPFILTER, D3DTEXF_NONE);
+
+        device->SetTexture(10, depthTexture);
+
+        const auto gameSize = ImGui::GetIO().DisplaySize;
+        const float texelOffset[4] = {-1.0f / gameSize.x, 1.0f / gameSize.y, 0.0f, 0.0f};
+        device->SetVertexDeclaration(depthPassVDecl);
+        device->SetVertexShaderConstantF(0, reinterpret_cast<const float*>(&texelOffset), 1);
+        device->SetVertexShader(depthPassVS);
+        device->SetPixelShaderConstantF(
+            0, std::array<float, 4>{passType == Components::PassType::Depth ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f}.data(), 1);
+        device->SetPixelShaderConstantF(
+            4, std::array<float, 4>{passType == Components::PassType::Normal ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f}.data(),
+            1);
+        device->SetPixelShaderConstantF(
+            8, std::array<float, 4>{onlyDrawViewmodel ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f}.data(), 1);
+        // device->SetPixelShaderConstantF(
+        //     1, std::array<float, 4>{passType == Components::PassType::Normal ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f}.data(),
+        //     1);
+        // device->SetPixelShaderConstantB(6, (BOOL*)&onlyDrawViewmodel, 1);
+        device->SetPixelShader(depthPassPS);
+        device->SetStreamSource(0, depthPassVertices, 0, sizeof(Types::FSVertex));
+        device->DrawPrimitive(D3DPT_TRIANGLELIST, 0, 2);
+
+        // Restore the DX9 transform
+        device->SetTransform(D3DTS_WORLD, &last_world);
+        device->SetTransform(D3DTS_VIEW, &last_view);
+        device->SetTransform(D3DTS_PROJECTION, &last_projection);
+
+        // Restore the DX9 state
+        d3d9_state_block->Apply();
+        d3d9_state_block->Release();
+    }
+
+    void GraphicsManager::DrawShaderForPassIndex(int32_t passIndex)
+    {
+        auto& captureSettings = Components::CaptureManager::Get().GetCaptureSettings();
+        auto& pass = captureSettings.passes[passIndex];
+
+        if (pass.type != Components::PassType::Default || pass.elements == Components::VisibleElements::OnlyGun)
+        {
+            DrawStreamsShader(pass.type, pass.elements == Components::VisibleElements::OnlyGun);
         }
     }
 
@@ -595,9 +750,10 @@ namespace IWXMVM::GFX
                 const auto* orbitCam = reinterpret_cast<const Components::OrbitCamera*>(activeCam.get());
 
                 const auto translate = glm::translate(orbitCam->GetOrigin());
-                const auto scale = glm::scale(glm::vec3(1, 1, 1) * glm::distance(activeCam->GetPosition(), orbitCam->GetOrigin()) / 45.0f);
+                const auto scale = glm::scale(glm::vec3(1, 1, 1) *
+                                              glm::distance(activeCam->GetPosition(), orbitCam->GetOrigin()) / 45.0f);
 
-                device->SetRenderState(D3DRS_ZENABLE, D3DZB_FALSE); // Disable depth test
+                device->SetRenderState(D3DRS_ZENABLE, D3DZB_FALSE);  // Disable depth test
                 BufferManager::Get().DrawMesh(axis, translate * scale);
                 device->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
             }
@@ -614,17 +770,18 @@ namespace IWXMVM::GFX
                                                        glm::radians(node.value.cameraData.rotation.x),
                                                        glm::radians(node.value.cameraData.rotation.z));
                 auto scale = glm::scale(glm::vec3(1, 1, 1));
-                
-                bool mouseIntersects = MouseIntersectsSphereAt(ImGui::GetIO().MousePos, node.value.cameraData.position, 20);
+
+                bool mouseIntersects =
+                    MouseIntersectsSphereAt(ImGui::GetIO().MousePos, node.value.cameraData.position, 20);
                 objectHoveredThisFrame |= mouseIntersects;
                 if (mouseIntersects && !heldAxis.has_value())
-                   scale = glm::scale(glm::vec3(1, 1, 1) * 1.1f);
+                    scale = glm::scale(glm::vec3(1, 1, 1) * 1.1f);
                 BufferManager::Get().DrawMesh(camera, translate * rotate * scale, mouseIntersects);
 
                 if (mouseIntersects && Input::KeyDown(ImGuiKey_MouseLeft) && selectedNodeId != node.id)
                 {
-                   selectedNodeId = node.id;
-                   gizmoMode = GizmoMode::TranslateLocal;
+                    selectedNodeId = node.id;
+                    gizmoMode = GizmoMode::TranslateLocal;
                 }
 
                 if (mouseIntersects && selectedNodeId == node.id && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
@@ -657,9 +814,14 @@ namespace IWXMVM::GFX
                 BufferManager::Get().ClearDynamicBuffers();
                 BufferManager::Get().AddMesh(&campath, BufferType::Dynamic);
                 BufferManager::Get().BindBuffers(BufferType::Dynamic);
-                
+
                 BufferManager::Get().DrawMesh(campath, glm::identity<glm::mat4>(), true);
             }
+        }
+
+        if (UI::CaptureMenu::GetDisplayPassIndex().has_value())
+        {
+            DrawShaderForPassIndex(UI::CaptureMenu::GetDisplayPassIndex().value());
         }
 
         // Restore the DX9 transform
@@ -671,4 +833,4 @@ namespace IWXMVM::GFX
         d3d9_state_block->Apply();
         d3d9_state_block->Release();
     }
-}  // namespace IWXMVM
+}  // namespace IWXMVM::GFX

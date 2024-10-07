@@ -4,6 +4,7 @@
 #include "UI/Animations.hpp"
 #include "UI/Blur.hpp"
 #include "UI/UIManager.hpp"
+#include "Resources.hpp"
 
 namespace IWXMVM::UI
 {
@@ -11,6 +12,7 @@ namespace IWXMVM::UI
     {
         Animation posAnim;
         Animation opacityAnim;
+        std::string message;
         Notifications::Notification type;
     };
 
@@ -46,21 +48,22 @@ namespace IWXMVM::UI
         return glm::lerp(a, b, t);
     }
 
-    void Notifications::Send()
+    void Notifications::Send(Notification type, const std::string& message)
     {
         std::memmove(notifs + 1, notifs, sizeof(notifs) - sizeof(notifs[0]));
+        std::memset(notifs, 0, sizeof(notifs[0]));
 
         notifWidth = Manager::GetWindowSizeX() / 12.0f;
         notifHeight = notifWidth / 1.4f;
         notifGap = Manager::GetFontSize() * 1.2f;
 
-        Notification_Info newNotif = {
+        notifs[0] = {
             .posAnim = Animation::Create(1.5f, Manager::GetWindowSizeY() + 1.0f,
                                          Manager::GetWindowSizeY() - notifGap - notifHeight, PosInterp),
             .opacityAnim = Animation::Create(4.0f, 1.0f, 0.0f, OpacityInterp),
-            .type = NodePlaced,
+            .message = message,
+            .type = type,
         };
-        notifs[0] = newNotif;
     }
 
     void Notifications::Render()
@@ -114,7 +117,22 @@ namespace IWXMVM::UI
             {
                 Blur::RenderToWindow(size, pos);
 
-                ImGui::Text("test");
+                switch (notifs[i].type)
+                {
+                    case Notification::Info:
+                        ImGui::Text(ICON_FA_CIRCLE_INFO " Info");
+                        break;
+                    case Notification::Warning:
+                        ImGui::Text(ICON_FA_TRIANGLE_EXCLAMATION " Warning");
+                        break;
+                    case Notification::Error:
+                        ImGui::Text(ICON_FA_XMARK " Error");
+                        break;
+                    default:
+                        break;
+                }
+
+                ImGui::TextWrapped(notifs[i].message.c_str());
             }
             ImGui::End();
 

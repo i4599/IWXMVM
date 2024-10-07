@@ -4,13 +4,32 @@
 
 namespace IWXMVM::Components
 {
-    enum class OutputFormat
+    enum class PassType
     {
-        Video,
-        CameraData,
-        ImageSequence,
-
+        Default,
+        Depth,
+        Normal,
         Count
+    };
+
+    enum class VisibleElements
+    {
+        Everything,
+        WorldAndPlayers,
+        OnlyGun,
+        OnlyWorld,
+        OnlyPlayers,
+        Count
+    };
+
+    struct PassData
+    {
+        PassType type;
+        VisibleElements elements;
+        std::string name;
+        FILE* pipe = nullptr;
+        std::int32_t id;
+        bool useReshade = true;
     };
 
     struct Resolution
@@ -39,31 +58,20 @@ namespace IWXMVM::Components
         Count
     };
 
-    enum class PassType
-    {
-        Default,
-        Depth,
-        Normal,
-        Count
-    };
-
-    struct PassData
-    {
-        PassType type;
-        Types::RenderingFlags renderingFlags;
-        std::string name;
-    };
-
     struct CaptureSettings
     {
         uint32_t startTick, endTick;
-        
-        OutputFormat outputFormat;
+
         std::optional<VideoCodec> videoCodec;
 
         Resolution resolution;
         int32_t framerate;
 
+        // In multi-pass mode, this is the name of the directory to put the passes in. Otherwise,
+        // it's the name of the recording
+        std::string name;
+
+        bool multipass;
         std::vector<PassData> passes;
     };
 
@@ -83,23 +91,20 @@ namespace IWXMVM::Components
         void ToggleCapture();
         void StartCapture();
         void StopCapture();
+        void CaptureFrame();
+        void PrepareFrame();
 
-        std::string_view GetOutputFormatLabel(OutputFormat outputFormat);
         std::string_view GetVideoCodecLabel(VideoCodec codec);
-        
+
         CaptureSettings& GetCaptureSettings()
         {
             return captureSettings;
         }
 
-        std::array<Components::Camera::Mode, 3> GetRecordableCameras() 
+        std::array<Components::Camera::Mode, 3> GetRecordableCameras()
         {
-            return 
-            {
-                Components::Camera::Mode::FirstPerson, 
-                Components::Camera::Mode::Dolly,
-                Components::Camera::Mode::Bone
-            };
+            return {Components::Camera::Mode::FirstPerson, Components::Camera::Mode::Dolly,
+                    Components::Camera::Mode::Bone};
         }
 
         const std::array<Resolution, 4>& GetSupportedResolutions()
@@ -109,12 +114,17 @@ namespace IWXMVM::Components
 
         std::array<int32_t, 6> GetSupportedFramerates()
         {
-            return { 50, 100, 125, 250, 500, 1000 };
+            return {50, 100, 125, 250, 500, 1000};
         }
 
         bool IsCapturing() const
         {
             return isCapturing;
+        }
+
+        bool IsFramePrepared() const
+        {
+            return framePrepared;
         }
 
         bool IsFFmpegPresent() const
@@ -123,9 +133,19 @@ namespace IWXMVM::Components
         }
 
         std::int32_t GetCapturedFrameCount() const
-		{
-			return capturedFrameCount;
-		}
+        {
+            return capturedFrameCount;
+        }
+
+        bool MultiPassEnabled() const
+        {
+            return captureSettings.multipass;
+        }
+
+        const PassData& GetCurrentPass() const
+        {
+            return captureSettings.passes[static_cast<std::size_t>(capturedFrameCount) % captureSettings.passes.size()];
+        }
 
         int32_t OnGameFrame();
 
@@ -139,8 +159,10 @@ namespace IWXMVM::Components
         std::array<Resolution, 4> supportedResolutions;
         CaptureSettings captureSettings;
 
+        IDirect3DSurface9* depthSurface = nullptr;
+        IDirect3DPixelShader9* depthShader = nullptr;
+
         // internal capture state
-        FILE* pipe = nullptr;
         Resolution screenDimensions = Resolution(0, 0);
         IDirect3DSurface9* backBuffer = nullptr;
         IDirect3DSurface9* downsampledRenderTarget = nullptr;
@@ -148,5 +170,7 @@ namespace IWXMVM::Components
         std::atomic_bool isCapturing = false;
         std::int32_t capturedFrameCount = 0;
         bool ffmpegNotFound = false;
+        bool framePrepared = false;
+        FILE* pipe = nullptr;
     };
 }  // namespace IWXMVM::Components

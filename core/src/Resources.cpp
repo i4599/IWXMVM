@@ -19,4 +19,7 @@ namespace IWXMVM::Resources
     INCBIN(KAWASE_DOWN_SHADER, "resources/shaders/kawase_down_ps.hlsl");
     INCBIN(KAWASE_UP_SHADER, "resources/shaders/kawase_up_ps.hlsl");
     INCBIN(BLUR_VSHADER, "resources/shaders/blur_vs.hlsl");
+
+    INCBIN(DEPTH_VERTEX_SHADER, "resources/shaders/depth_vs.hlsl");
+    INCBIN(DEPTH_PIXEL_SHADER, "resources/shaders/depth_ps.hlsl");
 };  // namespace IWXMVM::Resources

@@ -16,8 +16,6 @@ namespace IWXMVM::UI
 {
     static bool show = false;
 
-    static std::string folderName;
-    static bool multipass = false;
     static std::optional<int32_t> displayPassIndex = std::nullopt;
 
     void CaptureMenu::Render()
@@ -90,7 +88,7 @@ namespace IWXMVM::UI
             ImGui::PushFont(Manager::GetTQFont());
 
             float nameTextSize = ImGui::CalcTextSize("Filename").x;
-            if (multipass)
+            if (captureSettings.multipass)
             {
                 nameTextSize = ImGui::CalcTextSize("Directory Name").x;
             }
@@ -100,7 +98,7 @@ namespace IWXMVM::UI
 
             ImGui::SetCursorPosX(windowBorder + textIndent);
             ImGui::SetCursorPosY(ImGui::GetCursorPosY() + windowBorder * 0.45f);
-            if (!multipass)
+            if (!captureSettings.multipass)
             {
                 ImGui::Text("Filename");
             }
@@ -122,8 +120,9 @@ namespace IWXMVM::UI
             ImGui::SetCursorPosX(windowBorder);
             ImGui::SetCursorPosY(ImGui::GetCursorPosY() + textIndent * 2.0f);
             ImGui::SetNextItemWidth(nameSize);
-            ImGui::InputText(
-                "##FolderName", &folderName[0], folderName.capacity() + 1, ImGuiInputTextFlags_CallbackResize,
+            ImGui::InputTextWithHint(
+                "##FolderName", "Enter recording name...", &captureSettings.name[0],
+                captureSettings.name.capacity() + 1, ImGuiInputTextFlags_CallbackResize,
                 [](ImGuiInputTextCallbackData* data) -> int {
                     if (data->EventFlag == ImGuiInputTextFlags_CallbackResize)
                     {
@@ -133,7 +132,7 @@ namespace IWXMVM::UI
                     }
                     return 0;
                 },
-                &folderName);
+                &captureSettings.name);
 
             ImGui::SameLine();
             ImGui::SetCursorPosX(windowBorder + nameSize + optionsGap);
@@ -237,12 +236,12 @@ namespace IWXMVM::UI
 
             ImGui::SetCursorPosX(windowBorder);
             ImGui::SetCursorPosY(ImGui::GetCursorPosY() + windowBorder * 0.6f);
-            ImGui::Checkbox("Multi-pass Mode", &multipass);
+            ImGui::Checkbox("Multi-pass Mode", &captureSettings.multipass);
 
             ImVec2 captureButtonPos = {0.0f, size.y - Manager::GetFontSize() * 1.6f};
             ImVec2 captureButtonSize = {size.x, size.y - captureButtonPos.y};
 
-            if (multipass)
+            if (captureSettings.multipass)
             {
                 ImGui::SetCursorPosY(ImGui::GetCursorPosY() + windowBorder * 0.6f);
                 ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal, 2.0f);
@@ -258,6 +257,7 @@ namespace IWXMVM::UI
                 for (auto it = captureSettings.passes.begin(); it != captureSettings.passes.end(); it++)
                 {
                     auto i = std::distance(captureSettings.passes.begin(), it);
+                    captureSettings.passes[i].id = static_cast<std::int32_t>(i);
 
                     char passTextID[32] = {0};
                     std::snprintf(passTextID, sizeof(passTextID), "##Pass %d id", i + 1);
@@ -325,13 +325,11 @@ namespace IWXMVM::UI
                         if (ImGui::Button(ICON_FA_EYE_SLASH, {buttonWidth, buttonWidth}))
                         {
                             displayPassIndex = std::nullopt;
-
-                            // TODO: all of this below could be moved to another wrapper function
-                            Components::Rendering::SetRenderingFlags(Types::RenderingFlags_DrawEverything);
-                            // TODO: do other stuff necessary for the pass type (depth, normal, set clear color to 0 1 0
-                            // for greenscreen, etc)
-                            // TODO: hide viewmodel if DrawViewmodel is not set, because we cant do that via our
-                            // R_SetMaterial hook
+                            Components::Rendering::ResetVisibleElements();
+                        }
+                        else
+                        {
+                            Components::Rendering::SetVisibleElements(it->elements);
                         }
                     }
                     else if (!displayPassIndex.has_value())
@@ -339,7 +337,7 @@ namespace IWXMVM::UI
                         if (ImGui::Button(ICON_FA_EYE, {buttonWidth, buttonWidth}))
                         {
                             displayPassIndex = i;
-                            Components::Rendering::SetRenderingFlags(it->renderingFlags);
+                            Components::Rendering::SetVisibleElements(it->elements);
                         }
                     }
 
@@ -348,50 +346,41 @@ namespace IWXMVM::UI
                                          buttonWidth);
                     if (ImGui::Button(ICON_FA_MINUS, {buttonWidth, buttonWidth}))
                     {
+                        displayPassIndex = std::nullopt;
+                        Components::Rendering::ResetVisibleElements();
                         captureSettings.passes.erase(it);
                         ImGui::PopID();
                         break;
                     }
 
-                    float checkboxSpace = (size.x - windowBorder * 2.0f) / 4.0f;
-
                     ImGui::PushFont(Manager::GetTQFont());
 
+                    float elementsWidth = (size.x - windowBorder * 2.0f) / 3.0f;
                     ImGui::SetCursorPosX(windowBorder);
                     ImGui::SetCursorPosY(ImGui::GetCursorPosY() + Manager::GetFontSize() * 0.3f);
-                    bool drawPlayers = it->renderingFlags & Types::RenderingFlags_DrawPlayers;
-                    if (ImGui::Checkbox("Players", &drawPlayers))
+                    ImGui::SetNextItemWidth(elementsWidth);
+                    if (ImGui::BeginCombo("##elementsCombo", magic_enum::enum_name(it->elements).data()))
                     {
-                        it->renderingFlags =
-                            static_cast<Types::RenderingFlags>(it->renderingFlags ^ Types::RenderingFlags_DrawPlayers);
-                    }
+                        for (auto p = 0; p < (int)Components::VisibleElements::Count; p++)
+                        {
+                            bool isSelected = it->elements == (Components::VisibleElements)p;
+                            if (ImGui::Selectable(magic_enum::enum_name((Components::VisibleElements)p).data(),
+                                                  isSelected))
+                            {
+                                it->elements = (Components::VisibleElements)p;
+                            }
 
-                    ImGui::SameLine();
-                    ImGui::SetCursorPosX(windowBorder + checkboxSpace);
-                    bool drawWorld = it->renderingFlags & Types::RenderingFlags_DrawWorld;
-                    if (ImGui::Checkbox("World", &drawWorld))
-                    {
-                        it->renderingFlags =
-                            static_cast<Types::RenderingFlags>(it->renderingFlags ^ Types::RenderingFlags_DrawWorld);
+                            if (isSelected)
+                            {
+                                ImGui::SetItemDefaultFocus();
+                            }
+                        }
+                        ImGui::EndCombo();
                     }
-
+                    
                     ImGui::SameLine();
-                    ImGui::SetCursorPosX(windowBorder + checkboxSpace * 2.0f);
-                    bool drawViewmodel = it->renderingFlags & Types::RenderingFlags_DrawViewmodel;
-                    if (ImGui::Checkbox("Viewmodel", &drawViewmodel))
-                    {
-                        it->renderingFlags = static_cast<Types::RenderingFlags>(it->renderingFlags ^
-                                                                                Types::RenderingFlags_DrawViewmodel);
-                    }
-
-                    ImGui::SameLine();
-                    ImGui::SetCursorPosX(windowBorder + checkboxSpace * 3.0f);
-                    bool drawMuzzleFlash = it->renderingFlags & Types::RenderingFlags_DrawMuzzleFlash;
-                    if (ImGui::Checkbox("Muzzle Flash", &drawMuzzleFlash))
-                    {
-                        it->renderingFlags = static_cast<Types::RenderingFlags>(it->renderingFlags ^
-                                                                                Types::RenderingFlags_DrawMuzzleFlash);
-                    }
+                    ImGui::SetCursorPosX(windowBorder + elementsWidth + Manager::GetTQFontSize() * 0.4f);
+                    ImGui::Checkbox("ReShade", &it->useReshade);
 
                     ImGui::PopFont();
 
@@ -403,7 +392,7 @@ namespace IWXMVM::UI
                 if (ImGui::Button(ICON_FA_PLUS, {size.x - windowBorder * 2.0f, Manager::GetFontSize() * 1.1f}))
                 {
                     captureSettings.passes.push_back(
-                        {Components::PassType::Default, Types::RenderingFlags_DrawEverything});
+                        {Components::PassType::Default, Components::VisibleElements::Everything});
                 }
 
                 ImGui::EndChild();
@@ -421,6 +410,11 @@ namespace IWXMVM::UI
         ImGui::End();
 
         ImGui::PopStyleVar(3);
+    }
+
+    std::optional<std::int32_t> CaptureMenu::GetDisplayPassIndex()
+    {
+        return displayPassIndex;
     }
 
     bool* CaptureMenu::GetShowPtr() noexcept

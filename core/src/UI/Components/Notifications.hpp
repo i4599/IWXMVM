@@ -5,13 +5,14 @@ namespace IWXMVM::UI
 {
     namespace Notifications
     {
-        enum Notification
+        enum class Notification
         {
-            NodePlaced,
-            NodesDeleted,
+            Info,
+            Warning,
+            Error,
         };
 
-        void Send();
+        void Send(Notification type, const std::string& message);
         void Render();
     }  // namespace Notifications
 }  // namespace IWXMVM::UI
