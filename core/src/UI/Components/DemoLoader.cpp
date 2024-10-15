@@ -619,9 +619,7 @@ namespace IWXMVM::UI
             return;
         }
 
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
         ImGui::PushStyleVar(ImGuiStyleVar_IndentSpacing, Manager::GetFontSize());
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
 
         float width = (float)Manager::GetWindowSizeX() / 5.0f;
         float height = (float)Manager::GetWindowSizeY() / 1.7f;
@@ -674,9 +672,7 @@ namespace IWXMVM::UI
                 }
             }
 
-            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + Manager::GetFontSize() * 0.4f);
-
-            ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal, 4.0f);
+            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + Manager::GetFontSize() * 0.2f);
 
             float vertOffset = ImGui::GetCursorPosY();
 
@@ -689,7 +685,9 @@ namespace IWXMVM::UI
 
             if (!isScanningDemoPaths.load())
             {
+                ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, {Manager::GetFontSize() * 0.1f, 0.0f});
                 RenderSearchPaths();
+                ImGui::PopStyleVar();
             }
 
             ImGui::EndChild();
@@ -699,13 +697,12 @@ namespace IWXMVM::UI
             {
                 Refresh();
                 ImGui::End();
-                ImGui::PopStyleVar(3);
                 return;
             }
         }
         ImGui::End();
 
-        ImGui::PopStyleVar(3);
+        ImGui::PopStyleVar();
     }
 
     bool* DemoLoader::GetShowPtr() noexcept

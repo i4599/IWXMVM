@@ -121,11 +121,13 @@ namespace IWXMVM::UI
             initialized = true;
         }
 
+        /*
         ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
         ImGui::PushStyleVar(ImGuiStyleVar_IndentSpacing, Manager::GetFontSize());
         ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
         ImGui::PushStyleColor(ImGuiCol_FrameBg, {0.2f, 0.2f, 0.2f, 1.0f});
         ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, {0.3f, 0.3f, 0.3f, 1.0f});
+        */
 
         float width = Manager::GetWindowSizeX() / 5.0f;
         float height = Manager::GetWindowSizeY() / 1.7f;
@@ -150,9 +152,6 @@ namespace IWXMVM::UI
 
             // Save
             {
-                ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,
-                                    {Manager::GetFontSize() * 0.15f, Manager::GetFontSize() * 0.15f});
-
                 ImGui::SetCursorPos({windowGap, windowGap});
 
                 if (ImGui::Button(ICON_FA_FLOPPY_DISK " Save"))
@@ -212,8 +211,6 @@ namespace IWXMVM::UI
 
                     ImGui::EndCombo();
                 }
-
-                ImGui::PopStyleVar();
             }
 
             float separatorGap = Manager::GetFontSize() * 0.24f;
@@ -222,8 +219,7 @@ namespace IWXMVM::UI
             float colorIndent = checkboxIndent + Manager::GetFontSize() * 8.0f;
 
             // Sun Section
-            ImGui::SetCursorPos({0.0f, windowGap + Manager::GetFontSize() * 1.6f + separatorGap});
-            ImGui::SetNextItemWidth(size.x);
+            ImGui::SetCursorPos({0.0f, windowGap + Manager::GetFontSize() * 1.2f + separatorGap});
             float oldCursorY = ImGui::GetCursorPosY();
             ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal, 2.0f);
 
@@ -292,14 +288,13 @@ namespace IWXMVM::UI
                 bool modified = false;
 
                 ImGui::SetCursorPos({hudTextPos.x + hudTextSize.x + Manager::GetFontSize() * 0.5f,
-                                     hudTextPos.y + (hudTextSize.y - Manager::GetFontSize()) / 2.0f});
+                                     hudTextPos.y + (hudTextSize.y - Manager::GetFontSize()) / 2.0f + Manager::GetFontSize() * 0.05f});
                 modified |= ImGui::Checkbox("##HudToggle", &visuals.hudInfo.show2DElements);
 
                 if (visuals.hudInfo.show2DElements)
                 {
                     ImGui::SetCursorPos({0.0f, hudTextPos.y + hudTextSize.y + separatorGap});
                     ImVec2 oldCursor = ImGui::GetCursorPos();
-                    ImGui::SetNextItemWidth(size.x);
                     ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal, 2.0f);
 
                     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, {0.0f, Manager::GetFontSize() * 0.24f});
@@ -386,7 +381,7 @@ namespace IWXMVM::UI
                 bool modified = false;
 
                 ImGui::SetCursorPos({filmTextPos.x + filmTextSize.x + Manager::GetFontSize() * 0.5f,
-                                     filmTextPos.y + (filmTextSize.y - Manager::GetFontSize()) / 2.0f});
+                                     filmTextPos.y + (filmTextSize.y - Manager::GetFontSize()) / 2.0f + Manager::GetFontSize() * 0.05f});
                 modified |= ImGui::Checkbox("##TweaksToggle", &visuals.filmtweaks.enabled);
 
                 if (visuals.filmtweaks.enabled)
@@ -468,7 +463,7 @@ namespace IWXMVM::UI
                 bool modified = false;
 
                 ImGui::SetCursorPos({dofTextPos.x + dofTextSize.x + Manager::GetFontSize() * 0.5f,
-                                     dofTextPos.y + (dofTextSize.y - Manager::GetFontSize()) / 2.0f});
+                                     dofTextPos.y + (dofTextSize.y - Manager::GetFontSize()) / 2.0f + Manager::GetFontSize() * 0.05f});
                 modified |= ImGui::Checkbox("##DofToggle", &visuals.dof.enabled);
 
                 ImGui::SetCursorPosY(dofTextPos.y + dofTextSize.y + separatorGap);
@@ -533,8 +528,8 @@ namespace IWXMVM::UI
         }
         ImGui::End();
 
-        ImGui::PopStyleColor(2);
-        ImGui::PopStyleVar(3);
+        // ImGui::PopStyleColor(2);
+        // ImGui::PopStyleVar(3);
     }
 
     bool* VisualsMenu::GetShowPtr() noexcept

@@ -303,9 +303,6 @@ namespace IWXMVM::UI
             return {};
         }
 
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 12.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_GrabRounding, 16.0f);
-
         float width = Manager::GetWindowSizeX() / 2.4f;
         float height = width / 15.0f;
         ImVec2 size = {width, height};
@@ -336,8 +333,6 @@ namespace IWXMVM::UI
                                 Types::KeyframeValueType::CameraData, -360.0f, 360.0f});
         }
         ImGui::End();
-
-        ImGui::PopStyleVar(2);
 
         return pos;
     }

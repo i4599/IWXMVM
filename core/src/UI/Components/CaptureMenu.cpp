@@ -25,10 +25,6 @@ namespace IWXMVM::UI
             return;
         }
 
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_IndentSpacing, Manager::GetFontSize());
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
-
         float width = Manager::GetWindowSizeX() / 5.0f;
         float height = Manager::GetWindowSizeY() / 2.5f;
         ImVec2 size = {width, height};
@@ -59,6 +55,7 @@ namespace IWXMVM::UI
             ImGui::Text("Output Directory");
             ImGui::PopFont();
 
+            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, {0.0f, 0.0f});
             ImGui::SetCursorPosX(windowBorder);
             if (ImGui::Button(ICON_FA_FOLDER, {Manager::GetFontSize(), Manager::GetFontSize()}))
             {
@@ -70,11 +67,13 @@ namespace IWXMVM::UI
                     Configuration::Get().Write(true);
                 }
             }
+            ImGui::PopStyleVar();
+
             ImGui::SameLine(windowBorder + Manager::GetFontSize() * 1.25f);
             const auto& outputDirectory = PreferencesConfiguration::Get().captureOutputDirectory;
             ImGui::TextWrapped(outputDirectory.string().c_str());
 
-            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + windowBorder * 0.8f);
+            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + windowBorder * 0.6f);
             ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal, 2.0f);
 
             float optionsGap = Manager::GetFontSize() * 0.2f;
@@ -408,8 +407,6 @@ namespace IWXMVM::UI
             }
         }
         ImGui::End();
-
-        ImGui::PopStyleVar(3);
     }
 
     std::optional<std::int32_t> CaptureMenu::GetDisplayPassIndex()

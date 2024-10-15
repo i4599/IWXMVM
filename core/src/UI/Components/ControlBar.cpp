@@ -31,8 +31,6 @@ namespace IWXMVM::UI
         const auto demoInfo = Mod::GetGameInterface()->GetDemoInfo();
         const auto currentTick = Components::Playback::GetTimelineTick();
 
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 12.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_GrabRounding, 16.0f);
 
         float width = Manager::GetWindowSizeX() / 2.4f;
         float height = Manager::GetWindowSizeY() / 8.8f;
@@ -149,7 +147,5 @@ namespace IWXMVM::UI
             // ImGui::PopFont();
         }
         ImGui::End();
-
-        ImGui::PopStyleVar(2);
     }
 }  // namespace IWXMVM::UI
