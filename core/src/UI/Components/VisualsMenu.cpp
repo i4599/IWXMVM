@@ -121,14 +121,6 @@ namespace IWXMVM::UI
             initialized = true;
         }
 
-        /*
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_IndentSpacing, Manager::GetFontSize());
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
-        ImGui::PushStyleColor(ImGuiCol_FrameBg, {0.2f, 0.2f, 0.2f, 1.0f});
-        ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, {0.3f, 0.3f, 0.3f, 1.0f});
-        */
-
         float width = Manager::GetWindowSizeX() / 5.0f;
         float height = Manager::GetWindowSizeY() / 1.7f;
         ImVec2 size = {width, height};
@@ -527,9 +519,6 @@ namespace IWXMVM::UI
             }
         }
         ImGui::End();
-
-        // ImGui::PopStyleColor(2);
-        // ImGui::PopStyleVar(3);
     }
 
     bool* VisualsMenu::GetShowPtr() noexcept
