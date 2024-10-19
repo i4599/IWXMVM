@@ -697,6 +697,7 @@ namespace IWXMVM::UI
             {
                 Refresh();
                 ImGui::End();
+                ImGui::PopStyleVar();
                 return;
             }
         }

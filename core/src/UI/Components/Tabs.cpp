@@ -60,6 +60,15 @@ namespace IWXMVM::UI
             char name[16];
             std::snprintf(name, sizeof(name), "##tab_%d", i);
 
+            ImGuiStyle& style = ImGui::GetStyle();
+            ImVec4 borderColor = style.Colors[ImGuiCol_Border];
+            if (*tabs[i].show)
+            {
+                borderColor = style.Colors[ImGuiCol_CheckMark];
+            }
+
+			ImGui::PushStyleColor(ImGuiCol_Border, borderColor);
+
             ImGui::SetNextWindowPos({X, Y}, ImGuiCond_Always);
             ImGui::SetNextWindowSize({tabWidth, tabHeight}, ImGuiCond_Always);
             if (ImGui::Begin(name, nullptr, flags))
@@ -71,6 +80,8 @@ namespace IWXMVM::UI
                 }
             }
             ImGui::End();
+
+			ImGui::PopStyleColor();
 
             tabs[i].icon = nullptr;
         }
