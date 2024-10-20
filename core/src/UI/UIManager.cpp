@@ -18,6 +18,7 @@
 #include "UI/Components/DemoLoader.hpp"
 #include "UI/Components/KeyframeEditor.hpp"
 #include "UI/Components/Notifications.hpp"
+#include "UI/Components/PlayerAnimationUI.hpp"
 #include "UI/Components/Tabs.hpp"
 #include "UI/Components/VisualsMenu.hpp"
 #include "UI/TaskbarProgress.hpp"
@@ -387,11 +388,13 @@ namespace IWXMVM::UI
                 {
                     Tabs::Add(ICON_FA_SUN, VisualsMenu::GetShowPtr());
                     Tabs::Add(ICON_FA_CIRCLE, CaptureMenu::GetShowPtr());
+                    Tabs::Add(ICON_FA_PERSON_FALLING, PlayerAnimationUI::GetShowPtr());
                 }
                 else
                 {
                     *VisualsMenu::GetShowPtr() = false;
                     *CaptureMenu::GetShowPtr() = false;
+                    *PlayerAnimationUI::GetShowPtr() = false;
                 }
 
                 Tabs::Render();
@@ -400,6 +403,7 @@ namespace IWXMVM::UI
                 DemoLoader::Render();
                 VisualsMenu::Render();
                 CaptureMenu::Render();
+                PlayerAnimationUI::Render();
             }
 
             // Notifications should be displayed regardless of whether the UI is shown or not

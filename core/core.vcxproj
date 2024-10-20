@@ -148,6 +148,7 @@
     <ClCompile Include="src\UI\Components\DemoLoader.cpp" />
     <ClCompile Include="src\UI\Components\KeyframeEditor.cpp" />
     <ClCompile Include="src\UI\Components\Notifications.cpp" />
+    <ClCompile Include="src\UI\Components\PlayerAnimationUI.cpp" />
     <ClCompile Include="src\UI\Components\Tabs.cpp" />
     <ClCompile Include="src\UI\Components\VisualsMenu.cpp" />
     <ClCompile Include="src\UI\ImGuiEx\ImGuiExtensions.cpp" />
@@ -210,6 +211,7 @@
     <ClInclude Include="src\UI\Components\DemoLoader.hpp" />
     <ClInclude Include="src\UI\Components\KeyframeEditor.hpp" />
     <ClInclude Include="src\UI\Components\Notifications.hpp" />
+    <ClInclude Include="src\UI\Components\PlayerAnimationUI.hpp" />
     <ClInclude Include="src\UI\Components\Tabs.hpp" />
     <ClInclude Include="src\UI\Components\VisualsMenu.hpp" />
     <ClInclude Include="src\UI\ImGuiEx\KeyframeableControls.hpp" />
