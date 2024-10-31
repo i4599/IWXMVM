@@ -13,6 +13,7 @@
 #include "Utilities/MathUtils.hpp"
 #include "UI/Animations.hpp"
 #include "UI/Blur.hpp"
+#include "UI/Components/CameraSelection.hpp"
 #include "UI/Components/CaptureMenu.hpp"
 #include "UI/Components/ControlBar.hpp"
 #include "UI/Components/DemoLoader.hpp"
@@ -399,7 +400,7 @@ namespace IWXMVM::UI
 
                 Tabs::Render();
 
-                ControlBar::Render(KeyframeEditor::Render());
+                CameraSelection::Render(ControlBar::Render(KeyframeEditor::Render()));
                 DemoLoader::Render();
                 VisualsMenu::Render();
                 CaptureMenu::Render();

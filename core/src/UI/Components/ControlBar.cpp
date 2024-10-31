@@ -15,17 +15,17 @@ namespace IWXMVM::UI
 {
     std::optional<Types::Dvar> timescale;
 
-    void ControlBar::Render(ImVec2 keyframeManagerPos)
+    ImVec2 ControlBar::Render(ImVec2 keyframeManagerPos)
     {
         if (keyframeManagerPos.x == 0.0f && keyframeManagerPos.y == 0.0f)
         {
-            return;
+            return {};
         }
 
         if (!timescale.has_value())
         {
             timescale = Mod::GetGameInterface()->GetDvar("timescale");
-            return;
+            return {};
         }
 
         const auto demoInfo = Mod::GetGameInterface()->GetDemoInfo();
@@ -147,5 +147,7 @@ namespace IWXMVM::UI
             // ImGui::PopFont();
         }
         ImGui::End();
+
+        return pos;
     }
 }  // namespace IWXMVM::UI
