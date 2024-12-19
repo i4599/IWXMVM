@@ -12,7 +12,6 @@
 #include "Input.hpp"
 #include "Utilities/MathUtils.hpp"
 #include "UI/Animations.hpp"
-#include "UI/Blur.hpp"
 #include "UI/Components/CameraSelection.hpp"
 #include "UI/Components/CaptureMenu.hpp"
 #include "UI/Components/ControlBar.hpp"
@@ -33,7 +32,6 @@ namespace IWXMVM::UI
     INCBIN_EXTERN(FA_ICONS_FONT);
 
     static bool isInitialized = false;
-    static bool blurInitialized = false;
     static bool hideOverlay = false;
     static bool overlayHiddenThisFrame = false;
     static ImVec2 windowSize;
@@ -280,17 +278,6 @@ namespace IWXMVM::UI
             tqFont = RegisterFont("NotoSans Regular - TQ", NOTOSANS_FONT_data, NOTOSANS_FONT_size, GetTQFontSize());
             hFont = RegisterFont("NotoSans Regular - H", NOTOSANS_FONT_data, NOTOSANS_FONT_size, GetHFontSize());
 
-            if (!Blur::CreateResources())
-            {
-                LOG_WARN("Failed to create UI Blur resources");
-                blurInitialized = false;
-            }
-            else
-            {
-                LOG_INFO("UI Blur succesfully initialized");
-                blurInitialized = true;
-            }
-
             SetGameCursorVisibility(hideOverlay);
 
             Components::CaptureManager::Get().Initialize();
@@ -318,8 +305,6 @@ namespace IWXMVM::UI
         SetWindowLongPtr(D3D9::FindWindowHandle(), GWLP_WNDPROC, (LONG_PTR)originalGameWndProc);
         SetGameCursorVisibility(true);
 
-        Blur::DestroyResources();
-
         TaskbarProgress::Shutdown();
 
         ImGui_ImplDX9_Shutdown();
@@ -336,12 +321,6 @@ namespace IWXMVM::UI
             ImGui::NewFrame();
 
             Input::UpdateState(ImGui::GetIO());
-
-            // Blur needs to be captured always because notifications may use it even when the UI is hidden
-            if (blurInitialized)
-            {
-                Blur::Capture();
-            }
 
             overlayHiddenThisFrame = false;
 
@@ -436,11 +415,6 @@ namespace IWXMVM::UI
     bool Manager::IsInitialized() noexcept
     {
         return isInitialized;
-    }
-
-    bool Manager::IsBlurInitialized() noexcept
-    {
-        return blurInitialized;
     }
 
     bool Manager::IsHidden() noexcept

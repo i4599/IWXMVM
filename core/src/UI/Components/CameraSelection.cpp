@@ -5,7 +5,6 @@
 #include "Mod.hpp"
 #include "Resources.hpp"
 #include "UI/Animations.hpp"
-#include "UI/Blur.hpp"
 #include "UI/UIManager.hpp"
 
 namespace IWXMVM::UI
@@ -41,8 +40,6 @@ namespace IWXMVM::UI
 
         if (ImGui::Begin("##Camera Selection", nullptr, flags))
         {
-			// Blur::RenderToWindow(size, pos);
-
             float windowGap = Manager::GetFontSize() * 0.6f;
             ImGui::SetCursorPos({
                 windowGap,

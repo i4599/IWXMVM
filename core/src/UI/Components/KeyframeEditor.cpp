@@ -8,7 +8,6 @@
 #include "Resources.hpp"
 #include "Types/Dvar.hpp"
 #include "Types/KeyframeableProperty.hpp"
-#include "UI/Blur.hpp"
 #include "UI/UIManager.hpp"
 
 #include "imgui_internal.h"
@@ -319,8 +318,6 @@ namespace IWXMVM::UI
 
         if (ImGui::Begin("Keyframes", NULL, flags))
         {
-            Blur::RenderToWindow(size, pos);
-
             float barWidth = size.x * (6.0f / 7.0f);
             ImVec2 barPos = {(size.x - barWidth) / 2.0f, (size.y - Manager::GetFontSize()) / 2.0f};
             ImGui::SetNextItemWidth(barWidth);

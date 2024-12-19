@@ -2,7 +2,6 @@
 #include "Notifications.hpp"
 
 #include "UI/Animations.hpp"
-#include "UI/Blur.hpp"
 #include "UI/UIManager.hpp"
 #include "Resources.hpp"
 
@@ -115,8 +114,6 @@ namespace IWXMVM::UI
             std::snprintf(name, sizeof(name), "##notif_%d", i);
             if (ImGui::Begin(name, nullptr, flags))
             {
-                Blur::RenderToWindow(size, pos);
-
                 switch (notifs[i].type)
                 {
                     case Notification::Info:

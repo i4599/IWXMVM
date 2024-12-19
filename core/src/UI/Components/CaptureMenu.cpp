@@ -6,7 +6,6 @@
 #include "Configuration/PreferencesConfiguration.hpp"
 #include "Mod.hpp"
 #include "Resources.hpp"
-#include "UI/Blur.hpp"
 #include "UI/UIManager.hpp"
 #include "Utilities/PathUtils.hpp"
 
@@ -41,8 +40,6 @@ namespace IWXMVM::UI
         {
             size = ImGui::GetWindowSize();
             pos = ImGui::GetWindowPos();
-
-            Blur::RenderToWindow(size, pos, ImGui::GetScrollY());
 
             auto& captureManager = Components::CaptureManager::Get();
             auto& captureSettings = captureManager.GetCaptureSettings();

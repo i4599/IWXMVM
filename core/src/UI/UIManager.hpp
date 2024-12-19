@@ -39,7 +39,6 @@ namespace IWXMVM::UI
         void Frame();
 
         bool IsInitialized() noexcept;
-        bool IsBlurInitialized() noexcept;
         bool IsHidden() noexcept;
 
         ImVec2 GetWindowPos() noexcept;

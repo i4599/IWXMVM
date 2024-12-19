@@ -6,7 +6,6 @@
 #include "Resources.hpp"
 #include "Types/GameState.hpp"
 #include "UI/Animations.hpp"
-#include "UI/Blur.hpp"
 #include "UI/UIManager.hpp"
 #include "Utilities/PathUtils.hpp"
 
@@ -638,8 +637,6 @@ namespace IWXMVM::UI
         {
             size = ImGui::GetWindowSize();
             pos = ImGui::GetWindowPos();
-
-            Blur::RenderToWindow(size, pos);
 
             // Search bar
             {

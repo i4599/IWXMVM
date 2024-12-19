@@ -142,7 +142,6 @@
     </ClCompile>
     <ClCompile Include="src\Resources.cpp" />
     <ClCompile Include="src\UI\Animations.cpp" />
-    <ClCompile Include="src\UI\Blur.cpp" />
     <ClCompile Include="src\UI\Components\CameraSelection.cpp" />
     <ClCompile Include="src\UI\Components\CaptureMenu.cpp" />
     <ClCompile Include="src\UI\Components\ControlBar.cpp" />
@@ -206,7 +205,6 @@
     <ClInclude Include="src\Types\Sun.hpp" />
     <ClInclude Include="src\Types\Vertex.hpp" />
     <ClInclude Include="src\UI\Animations.hpp" />
-    <ClInclude Include="src\UI\Blur.hpp" />
     <ClInclude Include="src\UI\Components\CameraSelection.hpp" />
     <ClInclude Include="src\UI\Components\CaptureMenu.hpp" />
     <ClInclude Include="src\UI\Components\ControlBar.hpp" />

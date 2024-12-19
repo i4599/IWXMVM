@@ -3,7 +3,6 @@
 
 #include "Components/PlayerAnimation.hpp"
 #include "Resources.hpp"
-#include "UI/Blur.hpp"
 #include "UI/UIManager.hpp"
 
 #include "imgui_internal.h"
@@ -34,8 +33,6 @@ namespace IWXMVM::UI
         {
             size = ImGui::GetWindowSize();
             pos = ImGui::GetWindowPos();
-
-            Blur::RenderToWindow(size, pos, ImGui::GetScrollY());
 
             float windowGap = Manager::GetFontSize() * 0.4f;
             ImGui::PushFont(Manager::GetBoldFont());

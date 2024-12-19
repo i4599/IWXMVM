@@ -7,7 +7,6 @@
 #include "Utilities/PathUtils.hpp"
 #include "Resources.hpp"
 #include "UI/Animations.hpp"
-#include "UI/Blur.hpp"
 #include "UI/ImGuiEx/KeyframeableControls.hpp"
 #include "UI/UIManager.hpp"
 
@@ -139,8 +138,6 @@ namespace IWXMVM::UI
         {
             size = ImGui::GetWindowSize();
             pos = ImGui::GetWindowPos();
-
-            Blur::RenderToWindow(size, pos, ImGui::GetScrollY());
 
             // Save
             {
