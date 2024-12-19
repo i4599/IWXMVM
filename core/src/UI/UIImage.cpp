@@ -32,7 +32,7 @@ namespace IWXMVM::UI
         D3DSURFACE_DESC imageDesc;
         texture->GetLevelDesc(0, &imageDesc);
 
-        image.texture = texture;
+        image.texture = reinterpret_cast<ImTextureID>(texture);
         image.dimensions = ImVec2(static_cast<float>(imageDesc.Width), static_cast<float>(imageDesc.Height));
 
         resourceImageCache.insert({(uint8_t*)data, image});

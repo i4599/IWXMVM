@@ -121,7 +121,7 @@ namespace ImGuiEx
         if (format == NULL)
             format = DataTypeGetInfo(data_type)->PrintFmt;
 
-        const bool hovered = ItemHoverable(frame_bb, id, g.LastItemData.InFlags);
+        const bool hovered = ItemHoverable(frame_bb, id, g.LastItemData.ItemFlags);
         bool temp_input_is_active = temp_input_allowed && TempInputIsActive(id);
         if (!temp_input_is_active)
         {

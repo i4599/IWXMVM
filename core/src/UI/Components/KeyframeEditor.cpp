@@ -203,7 +203,7 @@ namespace IWXMVM::UI
             const auto barHeight = frame_bb.Max.y - frame_bb.Min.y;
             ImRect text_bb(ImVec2(positionX - textSize.x / 2, frame_bb.Min.y + (barHeight - textSize.y) / 2),
                            ImVec2(positionX + textSize.x / 2, frame_bb.Max.y - (barHeight - textSize.y) / 2));
-            const bool hovered = ItemHoverable(text_bb, id, g.LastItemData.InFlags);
+            const bool hovered = ItemHoverable(text_bb, id, g.LastItemData.ItemFlags);
 
             isAnyKeyframeHovered |= hovered;
 
@@ -256,7 +256,7 @@ namespace IWXMVM::UI
             ++it;
         }
 
-        const bool hovered = ItemHoverable(frame_bb, id, g.LastItemData.InFlags);
+        const bool hovered = ItemHoverable(frame_bb, id, g.LastItemData.ItemFlags);
         if (hovered && !isAnyKeyframeHovered && !selectedKeyframeId.has_value())
         {
             HandleTimelineZoomInteractions(frame_bb.Min, frame_bb.Max, property, std::nullopt);

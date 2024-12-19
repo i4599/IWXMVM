@@ -227,8 +227,9 @@ namespace IWXMVM::UI
             IMGUI_CHECKVERSION();
             ImGui::CreateContext();
 
-            ImGui::StyleColorsDark();
-            SetImGuiStyle();
+            // ImGui::StyleColorsDark();
+            // SetImGuiStyle();
+            ImGui::Spectrum::StyleColorsSpectrum();
 
             LOG_DEBUG("Initializing ImGui_ImplWin32 with HWND {0:x}", (std::uintptr_t)hwnd);
             ImGui_ImplWin32_Init(hwnd);

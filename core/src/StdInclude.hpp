@@ -50,9 +50,11 @@
 
 #pragma warning(push, 0)
 #define IMGUI_DEFINE_MATH_OPERATORS
+#define SPECTRUM_USE_DARK_THEME
 #include "imgui.h"
 #include "backends/imgui_impl_dx9.h"
 #include "backends/imgui_impl_win32.h"
+#include "imgui_spectrum.h"
 #pragma warning(pop)
 
 #include "magic_enum/magic_enum.hpp"
