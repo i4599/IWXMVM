@@ -5,8 +5,7 @@ namespace IWXMVM::UI
 {
     namespace VisualsMenu
     {
-        void Render();
-
-        bool* GetShowPtr() noexcept;
+        void Show();
+        const char* GetWindowName() noexcept;
     }  // namespace Tabs
 }  // namespace IWXMVM::UI

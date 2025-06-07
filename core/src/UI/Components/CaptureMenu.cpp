@@ -13,87 +13,49 @@
 
 namespace IWXMVM::UI
 {
-    static bool show = false;
-
     static std::optional<int32_t> displayPassIndex = std::nullopt;
 
-    void CaptureMenu::Render()
+    void CaptureMenu::Show()
     {
-        if (!show)
+        ImGui::Begin(GetWindowName(), nullptr, ImGuiWindowFlags_NoCollapse);
+
+        ImVec2 size = ImGui::GetWindowSize();
+        auto& captureManager = Components::CaptureManager::Get();
+        auto& captureSettings = captureManager.GetCaptureSettings();
+        auto endTick = Mod::GetGameInterface()->GetDemoInfo().endTick;
+
+        ImGui::PushFont(Manager::GetBoldFont());
+        ImGui::Text("Output Directory");
+        ImGui::PopFont();
+
+        if (ImGui::Button(ICON_FA_FOLDER))
         {
-            return;
+            auto folder = PathUtils::OpenFolderBrowseDialog();
+            if (folder.has_value())
+            {
+                LOG_INFO("Set recording output directory to: {}", folder.value().string());
+                PreferencesConfiguration::Get().captureOutputDirectory = folder.value();
+                Configuration::Get().Write(true);
+            }
         }
 
-        float width = Manager::GetWindowSizeX() / 5.0f;
-        float height = Manager::GetWindowSizeY() / 2.5f;
-        ImVec2 size = {width, height};
-        ImGui::SetNextWindowSize(size, ImGuiCond_Once);
+        ImGui::SameLine();
+        const auto& outputDirectory = PreferencesConfiguration::Get().captureOutputDirectory;
+        ImGui::TextWrapped(outputDirectory.string().c_str());
 
-        float X = Manager::GetWindowSizeX() / 1.4f - width / 2.0f;
-        float Y = Manager::GetWindowSizeY() / 2.0f - height / 2.0f;
-        ImVec2 pos = {X, Y};
-        ImGui::SetNextWindowPos(pos, ImGuiCond_Once);
-
-        ImGuiWindowFlags flags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar;
-
-        if (ImGui::Begin("##CaptureMenu", nullptr, flags))
+        if (ImGui::Button(ICON_FA_CIRCLE " Capture"))
         {
-            size = ImGui::GetWindowSize();
-            pos = ImGui::GetWindowPos();
+            if (captureManager.IsCapturing())
+                captureManager.StopCapture();
+            else
+                captureManager.StartCapture();
 
-            auto& captureManager = Components::CaptureManager::Get();
-            auto& captureSettings = captureManager.GetCaptureSettings();
-            auto endTick = Mod::GetGameInterface()->GetDemoInfo().endTick;
+        }
 
-            float windowBorder = Manager::GetFontSize() * 1.0f;
-
-            ImGui::PushFont(Manager::GetBoldFont());
-            ImGui::SetCursorPos({windowBorder, windowBorder});
-            ImGui::Text("Output Directory");
-            ImGui::PopFont();
-
-            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, {0.0f, 0.0f});
-            ImGui::SetCursorPosX(windowBorder);
-            if (ImGui::Button(ICON_FA_FOLDER, {Manager::GetFontSize(), Manager::GetFontSize()}))
-            {
-                auto folder = PathUtils::OpenFolderBrowseDialog();
-                if (folder.has_value())
-                {
-                    LOG_INFO("Set recording output directory to: {}", folder.value().string());
-                    PreferencesConfiguration::Get().captureOutputDirectory = folder.value();
-                    Configuration::Get().Write(true);
-                }
-            }
-            ImGui::PopStyleVar();
-
-            ImGui::SameLine(windowBorder + Manager::GetFontSize() * 1.25f);
-            const auto& outputDirectory = PreferencesConfiguration::Get().captureOutputDirectory;
-            ImGui::TextWrapped(outputDirectory.string().c_str());
-
-            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + windowBorder * 0.6f);
-            ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal, 2.0f);
-
-            float optionsGap = Manager::GetFontSize() * 0.2f;
-            float textIndent = Manager::GetFontSize() * 0.1f;
-            float remainingSpace = size.x - windowBorder * 2.0f - optionsGap * 2.0f;
-
-            float nameSize = remainingSpace / 2.8f;
-            float resolutionMenuSize = (remainingSpace - nameSize) / 2.0f;
-            float framerateMenuSize = resolutionMenuSize;
-
-            ImGui::PushFont(Manager::GetTQFont());
-
-            float nameTextSize = ImGui::CalcTextSize("Filename").x;
-            if (captureSettings.multipass)
-            {
-                nameTextSize = ImGui::CalcTextSize("Directory Name").x;
-            }
-
-            float resolutionTextSize = ImGui::CalcTextSize("Resolution").x;
-            float framerateTextSize = ImGui::CalcTextSize("Framerate").x;
-
-            ImGui::SetCursorPosX(windowBorder + textIndent);
-            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + windowBorder * 0.45f);
+        if (ImGui::BeginTable("##CaptureTable", 2, ImGuiTableFlags_SizingStretchSame))
+        {
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
             if (!captureSettings.multipass)
             {
                 ImGui::Text("Filename");
@@ -102,20 +64,8 @@ namespace IWXMVM::UI
             {
                 ImGui::Text("Directory Name");
             }
-
-            ImGui::SameLine();
-            ImGui::SetCursorPosX(windowBorder + nameSize + optionsGap + textIndent);
-            ImGui::Text("Resolution");
-
-            ImGui::SameLine();
-            ImGui::SetCursorPosX(windowBorder + nameSize + optionsGap + resolutionMenuSize + optionsGap + textIndent);
-            ImGui::Text("Framerate");
-
-            ImGui::PopFont();
-
-            ImGui::SetCursorPosX(windowBorder);
-            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + textIndent * 2.0f);
-            ImGui::SetNextItemWidth(nameSize);
+            ImGui::TableSetColumnIndex(1);
+            ImGui::SetNextItemWidth(-FLT_MIN);
             ImGui::InputTextWithHint(
                 "##FolderName", "Enter recording name...", &captureSettings.name[0],
                 captureSettings.name.capacity() + 1, ImGuiInputTextFlags_CallbackResize,
@@ -130,10 +80,13 @@ namespace IWXMVM::UI
                 },
                 &captureSettings.name);
 
-            ImGui::SameLine();
-            ImGui::SetCursorPosX(windowBorder + nameSize + optionsGap);
-            ImGui::SetNextItemWidth(resolutionMenuSize);
-            if (ImGui::BeginCombo("##captureMenuResolutionCombo", captureSettings.resolution.ToString().c_str()))
+            
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::Text("Resolution");
+            ImGui::TableSetColumnIndex(1);
+            ImGui::SetNextItemWidth(-FLT_MIN);
+			if (ImGui::BeginCombo("##captureMenuResolutionCombo", captureSettings.resolution.ToString().c_str()))
             {
                 for (auto resolution : captureManager.GetSupportedResolutions())
                 {
@@ -151,10 +104,12 @@ namespace IWXMVM::UI
                 ImGui::EndCombo();
             }
 
-            ImGui::SameLine();
-            ImGui::SetCursorPosX(windowBorder + nameSize + optionsGap + resolutionMenuSize + optionsGap);
-            ImGui::SetNextItemWidth(framerateMenuSize);
-            if (ImGui::BeginCombo("##captureMenuFramerateCombo", std::format("{0}", captureSettings.framerate).c_str()))
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::Text("Framerate");
+            ImGui::TableSetColumnIndex(1);
+            ImGui::SetNextItemWidth(-FLT_MIN);
+			if (ImGui::BeginCombo("##captureMenuFramerateCombo", std::format("{0}", captureSettings.framerate).c_str()))
             {
                 for (auto framerate : captureManager.GetSupportedFramerates())
                 {
@@ -173,33 +128,12 @@ namespace IWXMVM::UI
                 ImGui::EndCombo();
             }
 
-            float codecMenuSize = remainingSpace / 2.0f;
-            float timeframeSize = (remainingSpace - codecMenuSize) / 2.0f;
-
-            ImGui::PushFont(Manager::GetTQFont());
-
-            float codecTextSize = ImGui::CalcTextSize("Codec").x;
-            float startTextSize = ImGui::CalcTextSize("Start Tick").x;
-            float endTextSize = ImGui::CalcTextSize("End Tick").x;
-
-            ImGui::SetCursorPosX(windowBorder + textIndent);
-            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + Manager::GetTQFontSize() * 0.36f);
+			ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
             ImGui::Text("Codec");
-
-            ImGui::SameLine();
-            ImGui::SetCursorPosX(windowBorder + codecMenuSize + optionsGap + textIndent);
-            ImGui::Text("Start Tick");
-
-            ImGui::SameLine();
-            ImGui::SetCursorPosX(windowBorder + codecMenuSize + optionsGap + timeframeSize + optionsGap + textIndent);
-            ImGui::Text("End Tick");
-
-            ImGui::PopFont();
-
-            ImGui::SetCursorPosX(windowBorder);
-            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + textIndent * 2.0f);
-            ImGui::SetNextItemWidth(codecMenuSize);
-            if (ImGui::BeginCombo("##captureMenuVideoCodecCombo",
+            ImGui::TableSetColumnIndex(1);
+            ImGui::SetNextItemWidth(-FLT_MIN);
+			if (ImGui::BeginCombo("##captureMenuVideoCodecCombo",
                                   captureManager.GetVideoCodecLabel(captureSettings.videoCodec.value()).data()))
             {
                 for (auto videoCodec = 0; videoCodec < static_cast<std::int32_t>(Components::VideoCodec::Count);
@@ -221,62 +155,52 @@ namespace IWXMVM::UI
                 ImGui::EndCombo();
             }
 
-            ImGui::SameLine();
-            ImGui::SetCursorPosX(windowBorder + codecMenuSize + optionsGap);
-            ImGui::SetNextItemWidth(timeframeSize);
-            ImGui::SliderInt("##Start", reinterpret_cast<std::int32_t*>(&captureSettings.startTick), 0, endTick);
-            ImGui::SameLine();
-            ImGui::SetCursorPosX(windowBorder + codecMenuSize + optionsGap + timeframeSize + optionsGap);
-            ImGui::SetNextItemWidth(timeframeSize);
-            ImGui::SliderInt("##End", reinterpret_cast<std::int32_t*>(&captureSettings.endTick), 0, endTick);
+            std::int32_t tickRange[2] = {
+                static_cast<std::int32_t>(captureSettings.startTick),
+                static_cast<std::int32_t>(captureSettings.endTick)
+            };
+			ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+			ImGui::Text("Tick range");
+            ImGui::TableSetColumnIndex(1);
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            ImGui::SliderInt2("##TickRange", tickRange, 0, endTick);
+            captureSettings.startTick = static_cast<std::uint32_t>(tickRange[0]);
+            captureSettings.endTick = static_cast<std::uint32_t>(tickRange[1]);
 
-            ImGui::SetCursorPosX(windowBorder);
-            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + windowBorder * 0.6f);
-            ImGui::Checkbox("Multi-pass Mode", &captureSettings.multipass);
+            ImGui::EndTable();
+        }
 
-            ImVec2 captureButtonPos = {0.0f, size.y - Manager::GetFontSize() * 1.6f};
-            ImVec2 captureButtonSize = {size.x, size.y - captureButtonPos.y};
+        ImGui::Checkbox("Multi-pass Mode", &captureSettings.multipass);
 
-            if (captureSettings.multipass)
+        if (captureSettings.multipass)
+        {
+            ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal, 2.0f);
+
+            ImGuiWindowFlags childWindowFlags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar;
+            ImGui::BeginChild("Passes Window", {}, 0, childWindowFlags);
+            size = ImGui::GetWindowSize();
+
+            for (auto it = captureSettings.passes.begin(); it != captureSettings.passes.end(); it++)
             {
-                ImGui::SetCursorPosY(ImGui::GetCursorPosY() + windowBorder * 0.6f);
-                ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal, 2.0f);
+                auto i = std::distance(captureSettings.passes.begin(), it);
+                captureSettings.passes[i].id = static_cast<std::int32_t>(i);
 
-                float gapBetweenPasses = windowBorder * 0.8f;
+                char passTextID[32] = {0};
+                std::snprintf(passTextID, sizeof(passTextID), "##Pass %d id", i + 1);
 
-                float vertOffset = ImGui::GetCursorPosY();
+                char tableID[32] = {0};
+                std::snprintf(tableID, sizeof(tableID), "##Table %d", i + 1);
 
-                ImGuiWindowFlags childWindowFlags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar;
-                ImGui::BeginChild("Passes Window", {size.x, size.y - captureButtonSize.y - vertOffset}, 0,
-                                  childWindowFlags);
-
-                for (auto it = captureSettings.passes.begin(); it != captureSettings.passes.end(); it++)
+                if (ImGui::BeginTable(tableID, 5, ImGuiTableFlags_SizingStretchProp))
                 {
-                    auto i = std::distance(captureSettings.passes.begin(), it);
-                    captureSettings.passes[i].id = static_cast<std::int32_t>(i);
+                    ImGui::TableNextRow();
 
-                    char passTextID[32] = {0};
-                    std::snprintf(passTextID, sizeof(passTextID), "##Pass %d id", i + 1);
-                    ImGui::PushID(passTextID);
-
-                    ImGui::SetCursorPosX(windowBorder);
-                    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + gapBetweenPasses);
-
-                    ImVec2 layerIconSize = ImGui::CalcTextSize(ICON_FA_LAYER_GROUP);
+                    ImGui::TableSetColumnIndex(0);
                     ImGui::Text(ICON_FA_LAYER_GROUP);
-
-                    ImGui::SameLine();
-
-                    float elementGap = Manager::GetFontSize() * 0.2f;
-                    float buttonWidth = Manager::GetFontSize();
-
                     char passText[32] = {0};
                     std::snprintf(passText, sizeof(passText), "Pass %d", i + 1);
-                    ImGui::SetCursorPosX(windowBorder + layerIconSize.x + elementGap);
-                    float inputTextAndComboWidth =
-                        size.x - windowBorder * 2.0f - layerIconSize.x - elementGap * 3.0f - buttonWidth * 2.0f;
-                    float inputTextWidth = inputTextAndComboWidth * 0.7f;
-                    ImGui::SetNextItemWidth(inputTextWidth);
+                    ImGui::TableSetColumnIndex(1);
                     ImGui::InputTextWithHint(
                         passTextID, passText, &captureSettings.passes[i].name[0],
                         captureSettings.passes[i].name.capacity() + 1, ImGuiInputTextFlags_CallbackResize,
@@ -291,10 +215,7 @@ namespace IWXMVM::UI
                         },
                         &captureSettings.passes[i].name);
 
-                    float comboWidth = inputTextAndComboWidth - inputTextWidth - elementGap;
-                    ImGui::SameLine();
-                    ImGui::SetCursorPosX(windowBorder + layerIconSize.x + elementGap * 2.0f + inputTextWidth);
-                    ImGui::SetNextItemWidth(comboWidth);
+                    ImGui::TableSetColumnIndex(2);
                     if (ImGui::BeginCombo("##passTypeCombo", magic_enum::enum_name(it->type).data()))
                     {
                         for (auto p = 0; p < (int)Components::PassType::Count; p++)
@@ -313,12 +234,10 @@ namespace IWXMVM::UI
                         ImGui::EndCombo();
                     }
 
-                    ImGui::SameLine();
-                    ImGui::SetCursorPosX(windowBorder + layerIconSize.x + elementGap * 2.0f + inputTextAndComboWidth);
-
+                    ImGui::TableSetColumnIndex(3);
                     if (displayPassIndex.has_value() && displayPassIndex.value() == i)
                     {
-                        if (ImGui::Button(ICON_FA_EYE_SLASH, {buttonWidth, buttonWidth}))
+                        if (ImGui::Button(ICON_FA_EYE_SLASH))
                         {
                             displayPassIndex = std::nullopt;
                             Components::Rendering::ResetVisibleElements();
@@ -330,89 +249,81 @@ namespace IWXMVM::UI
                     }
                     else if (!displayPassIndex.has_value())
                     {
-                        if (ImGui::Button(ICON_FA_EYE, {buttonWidth, buttonWidth}))
+                        if (ImGui::Button(ICON_FA_EYE))
                         {
                             displayPassIndex = i;
                             Components::Rendering::SetVisibleElements(it->elements);
                         }
                     }
 
-                    ImGui::SameLine();
-                    ImGui::SetCursorPosX(windowBorder + layerIconSize.x + elementGap * 3.0f + inputTextAndComboWidth +
-                                         buttonWidth);
-                    if (ImGui::Button(ICON_FA_MINUS, {buttonWidth, buttonWidth}))
+                    ImGui::TableSetColumnIndex(4);
+                    if (ImGui::Button(ICON_FA_MINUS))
                     {
                         displayPassIndex = std::nullopt;
                         Components::Rendering::ResetVisibleElements();
                         captureSettings.passes.erase(it);
-                        ImGui::PopID();
+                        ImGui::EndTable();
                         break;
                     }
 
-                    ImGui::PushFont(Manager::GetTQFont());
-
-                    float elementsWidth = (size.x - windowBorder * 2.0f) / 3.0f;
-                    ImGui::SetCursorPosX(windowBorder);
-                    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + Manager::GetFontSize() * 0.3f);
-                    ImGui::SetNextItemWidth(elementsWidth);
-                    if (ImGui::BeginCombo("##elementsCombo", magic_enum::enum_name(it->elements).data()))
-                    {
-                        for (auto p = 0; p < (int)Components::VisibleElements::Count; p++)
-                        {
-                            bool isSelected = it->elements == (Components::VisibleElements)p;
-                            if (ImGui::Selectable(magic_enum::enum_name((Components::VisibleElements)p).data(),
-                                                  isSelected))
-                            {
-                                it->elements = (Components::VisibleElements)p;
-                            }
-
-                            if (isSelected)
-                            {
-                                ImGui::SetItemDefaultFocus();
-                            }
-                        }
-                        ImGui::EndCombo();
-                    }
-                    
-                    ImGui::SameLine();
-                    ImGui::SetCursorPosX(windowBorder + elementsWidth + Manager::GetTQFontSize() * 0.4f);
-                    ImGui::Checkbox("ReShade", &it->useReshade);
-
-                    ImGui::PopFont();
-
-                    ImGui::PopID();
+                    ImGui::EndTable();
                 }
 
-                ImGui::SetCursorPosX(windowBorder);
-                ImGui::SetCursorPosY(ImGui::GetCursorPosY() + gapBetweenPasses);
-                if (ImGui::Button(ICON_FA_PLUS, {size.x - windowBorder * 2.0f, Manager::GetFontSize() * 1.1f}))
-                {
-                    captureSettings.passes.push_back(
-                        {Components::PassType::Default, Components::VisibleElements::Everything});
-                }
+				ImGui::PushID(passTextID);
+				ImGui::PushFont(Manager::GetTQFont());
 
-                ImGui::EndChild();
+				if (ImGui::BeginCombo("##elementsCombo", magic_enum::enum_name(it->elements).data()))
+				{
+					for (auto p = 0; p < (int)Components::VisibleElements::Count; p++)
+					{
+						bool isSelected = it->elements == (Components::VisibleElements)p;
+						if (ImGui::Selectable(magic_enum::enum_name((Components::VisibleElements)p).data(),
+											  isSelected))
+						{
+							it->elements = (Components::VisibleElements)p;
+						}
+
+						if (isSelected)
+						{
+							ImGui::SetItemDefaultFocus();
+						}
+					}
+					ImGui::EndCombo();
+				}
+
+				ImGui::SameLine();
+				ImGui::Checkbox("ReShade", &it->useReshade);
+
+				ImGui::PopFont();
+				ImGui::PopID();
             }
 
-            ImGui::SetCursorPos(captureButtonPos);
-            if (ImGui::Button("Capture", captureButtonSize))
+            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, {0.0f, 0.0f});
+            ImVec2 plusButtonSize = {
+                size.x - Manager::GetFontSize() * 2.8f,
+                Manager::GetFontSize() * 1.1f,
+            };
+            ImGui::SetCursorPosX((size.x - plusButtonSize.x) / 2.0f);
+            if (ImGui::Button(ICON_FA_PLUS, plusButtonSize))
             {
-                if (captureManager.IsCapturing())
-                    captureManager.StopCapture();
-                else
-                    captureManager.StartCapture();
+                captureSettings.passes.push_back(
+                    {Components::PassType::Default, Components::VisibleElements::Everything});
             }
+            ImGui::PopStyleVar();
+
+            ImGui::EndChild();
         }
+
         ImGui::End();
+    }
+
+    const char* CaptureMenu::GetWindowName() noexcept
+    {
+        return "Capture";
     }
 
     std::optional<std::int32_t> CaptureMenu::GetDisplayPassIndex()
     {
         return displayPassIndex;
-    }
-
-    bool* CaptureMenu::GetShowPtr() noexcept
-    {
-        return &show;
     }
 }  // namespace IWXMVM::UI

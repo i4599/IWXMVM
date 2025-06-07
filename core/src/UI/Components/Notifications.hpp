@@ -13,6 +13,6 @@ namespace IWXMVM::UI
         };
 
         void Send(Notification type, const std::string& message);
-        void Render();
+        void Show();
     }  // namespace Notifications
 }  // namespace IWXMVM::UI

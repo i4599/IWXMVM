@@ -6,8 +6,7 @@ namespace IWXMVM::UI
     namespace DemoLoader
     {
         void Initialize();
-        void Render();
-
-        bool* GetShowPtr() noexcept;
+        void Show();
+        const char* GetWindowName() noexcept;
     }  // namespace DemoLoader
 }  // namespace IWXMVM::UI

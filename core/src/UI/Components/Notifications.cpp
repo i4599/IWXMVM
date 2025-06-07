@@ -65,7 +65,7 @@ namespace IWXMVM::UI
         };
     }
 
-    void Notifications::Render()
+    void Notifications::Show()
     {
         float X = notifGap;
 

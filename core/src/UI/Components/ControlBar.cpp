@@ -3,6 +3,7 @@
 
 #include "Components/Playback.hpp"
 #include "Components/Rewinding.hpp"
+#include "Input.hpp"
 #include "Mod.hpp"
 #include "Resources.hpp"
 #include "Types/Dvar.hpp"
@@ -12,139 +13,187 @@
 
 namespace IWXMVM::UI
 {
+	float playbackSpeed = 1.0f;
+
     std::optional<Types::Dvar> timescale;
 
-    ImVec2 ControlBar::Render(ImVec2 keyframeManagerPos)
+    void SmartSetTickDelta(int32_t value)
     {
-        if (keyframeManagerPos.x == 0.0f && keyframeManagerPos.y == 0.0f)
+        // Skip forward/backward by the desired amount of ticks, while snapping to the closest capturing marker if 
+        // there is one between where we are and where we want to go
+        // added skip forward/backward to frozen tick marker
+        
+        auto& captureSettings = Components::CaptureManager::Get().GetCaptureSettings();
+        auto currentTick = Components::Playback::GetTimelineTick();
+        auto frozenTick = Components::Playback::GetFrozenTick();
+        auto targetTick = currentTick + value;
+
+        if (value > 0)
         {
-            return {};
+            // skipping forward
+            if (captureSettings.startTick > currentTick && captureSettings.startTick < targetTick)
+            {
+                Components::Playback::SetTickDelta(captureSettings.startTick - currentTick);
+                return;
+            }
+            else if (captureSettings.endTick > currentTick && captureSettings.endTick < targetTick)
+            {
+                Components::Playback::SetTickDelta(captureSettings.endTick - currentTick);
+                return;
+            }
+
+            if (frozenTick.has_value() && frozenTick.value() > currentTick && frozenTick.value() < targetTick)
+            {
+                Components::Playback::SetTickDelta(frozenTick.value() - currentTick);
+                return;
+            }
+        }
+        else if (value < 0)
+        {
+            // skipping backward
+            if (captureSettings.endTick < currentTick && captureSettings.endTick > targetTick)
+            {
+                Components::Playback::SetTickDelta(captureSettings.endTick - currentTick, true);
+                return;
+            }
+            else if (captureSettings.startTick < currentTick && captureSettings.startTick > targetTick)
+            {
+                Components::Playback::SetTickDelta(captureSettings.startTick - currentTick, true);
+                return;
+            }
+
+            if (frozenTick.has_value() && frozenTick.value() < currentTick && frozenTick.value() > targetTick)
+            {
+                Components::Playback::SetTickDelta(frozenTick.value() - currentTick, true);
+                return;
+            }
+        }
+        Components::Playback::SetTickDelta(value);
+    }
+
+	void HandlePlaybackInput()
+    {
+        if (Components::CaptureManager::Get().IsCapturing())
+            return;
+        
+        static constexpr std::array TIMESCALE_STEPS = IWXMVM::Components::Playback::TIMESCALE_STEPS;
+
+        if (Input::BindDown(Action::PlaybackToggle))
+        {
+            Components::Playback::TogglePaused();
         }
 
+        if (Input::BindDown(Action::PlaybackFaster))
+        {
+            float& fTimescale = timescale.value().value->floating_point;
+
+            if (const auto it = std::upper_bound(TIMESCALE_STEPS.begin(), TIMESCALE_STEPS.end(), fTimescale);
+                it != TIMESCALE_STEPS.end())
+                fTimescale = *it;
+        }
+
+        if (Input::BindDown(Action::PlaybackSlower))
+        {
+            float& fTimescale = timescale.value().value->floating_point;
+
+            if (const auto it = std::upper_bound(TIMESCALE_STEPS.rbegin(), TIMESCALE_STEPS.rend(), fTimescale,
+                                                 std::greater<float>());
+                it != TIMESCALE_STEPS.rend())
+                fTimescale = *it;
+        }
+
+        if (Input::BindDown(Action::PlaybackSkipForward))
+        {
+            SmartSetTickDelta(1000);
+        }
+
+        if (Input::BindDown(Action::PlaybackSkipBackward))
+        {
+            SmartSetTickDelta(-1000);
+        }
+
+        if (Input::BindDown(Action::TimeFrameMoveStart))
+        {
+            auto& captureManager = Components::CaptureManager::Get();
+            auto& captureSettings = captureManager.GetCaptureSettings();
+            captureSettings.startTick = Components::Playback::GetTimelineTick();
+        }
+
+        if (Input::BindDown(Action::TimeFrameMoveEnd))
+        {
+            auto& captureManager = Components::CaptureManager::Get();
+            auto& captureSettings = captureManager.GetCaptureSettings();
+            captureSettings.endTick = Components::Playback::GetTimelineTick();
+        }
+    }
+
+    void ControlBar::Show(ImVec2 size, ImVec2 pos)
+    {
         if (!timescale.has_value())
         {
             timescale = Mod::GetGameInterface()->GetDvar("timescale");
-            return {};
+            return;
         }
+
+		HandlePlaybackInput();
 
         const auto demoInfo = Mod::GetGameInterface()->GetDemoInfo();
         const auto currentTick = Components::Playback::GetTimelineTick();
 
-
-        float width = Manager::GetWindowSizeX() / 2.4f;
-        float height = Manager::GetWindowSizeY() / 8.8f;
-        ImVec2 size = {width, height};
         ImGui::SetNextWindowSize(size, ImGuiCond_Always);
-
-        float X = keyframeManagerPos.x;
-        float Y = keyframeManagerPos.y - Manager::GetFontSize() * 0.5f - height;
-        ImVec2 pos = {X, Y};
-        ImGui::SetNextWindowPos(pos, ImGuiCond_Always, {});
+        ImGui::SetNextWindowPos(pos, ImGuiCond_Always);
 
         ImGuiWindowFlags flags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse |
                                  ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
                                  ImGuiWindowFlags_NoMove;
 
-        if (ImGui::Begin("Control Bar", nullptr, flags))
+        ImGui::Begin("ControlBar", nullptr, flags);
+
+        float playButtonHeight = size.y / 2.0f;
+        float playButtonWidth = playButtonHeight;
+
+        float windowPadding = (size.y - playButtonHeight) / 2.0f;
+        float horizontalSpacing = windowPadding / 2.0f;
+
+        ImGui::SetCursorPos({windowPadding, windowPadding});
+        if (ImGui::Button(Components::Playback::IsPaused() ? ICON_FA_PLAY : ICON_FA_PAUSE, { playButtonWidth, playButtonHeight }))
         {
-            float barWidth = size.x * (6.0f / 7.0f);
-            ImVec2 barPos = {(size.x - barWidth) / 2.0f, Manager::GetFontSize() * 2.1f};
-            ImGui::SetNextItemWidth(barWidth);
-            ImGui::SetCursorPos(barPos);
-
-            static std::int32_t tick;
-            const bool draggedProgressBar = ImGui::SliderInt(
-                "##Timeline slider", &tick, 0, static_cast<int>(demoInfo.endTick), "", ImGuiSliderFlags_None);
-
-            if (draggedProgressBar && !Components::Rewinding::IsRewinding())
-            {
-                Components::Playback::SetTickDelta(tick - static_cast<std::int32_t>(currentTick));
-            }
-            else
-            {
-                tick = static_cast<std::int32_t>(currentTick);
-            }
-
-            ImVec2 startTickPos = {barPos.x + Manager::GetFontSize() / 8.0f,
-                                   barPos.y + Manager::GetFontSize() * (7.0f / 6.0f)};
-            ImGui::SetCursorPos(startTickPos);
-            ImGui::Text("%d", 0);
-
-            char endTickText[32] = {};
-            snprintf(endTickText, sizeof(endTickText), "%u", demoInfo.endTick);
-            ImVec2 endTickSize = ImGui::CalcTextSize(endTickText);
-
-            ImVec2 endTickPos = {barPos.x + barWidth - endTickSize.x - Manager::GetFontSize() / 8.0f,
-                                 barPos.y + Manager::GetFontSize() * (7.0f / 6.0f)};
-            ImGui::SetCursorPos(endTickPos);
-            ImGui::Text("%u", demoInfo.endTick);
-
-            char currentTickText[32] = {};
-            snprintf(currentTickText, sizeof(currentTickText), "%u", currentTick);
-            ImVec2 currentTickSize = ImGui::CalcTextSize(currentTickText);
-
-            ImVec2 currentTickPos = {(barPos.x + barWidth - currentTickSize.x) / 2.0f,
-                                     barPos.y + Manager::GetFontSize() * (7.0f / 6.0f)};
-            ImGui::SetCursorPos(currentTickPos);
-            ImGui::Text("%d", tick);
-
-            ImVec2 playButtonPos = {barPos.x + Manager::GetIconsFontSize() / 8.0f,
-                                    barPos.y - Manager::GetIconsFontSize() * (7.0f / 4.0f)};
-            ImGui::SetCursorPos(playButtonPos);
-            ImVec2 playButtonSize = {};
-            if (Components::Playback::IsPaused())
-            {
-                ImGui::Text(ICON_FA_PLAY);
-                playButtonSize = ImGui::CalcTextSize(ICON_FA_PLAY);
-            }
-            else
-            {
-                ImGui::Text(ICON_FA_PAUSE);
-                playButtonSize = ImGui::CalcTextSize(ICON_FA_PAUSE);
-            }
-            // if (ImGui::Button(ICON_FA_PLAY, playButtonSize))
-            if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
-            {
-                Components::Playback::TogglePaused();
-            }
-
-            float timescaleSliderWidth = playButtonSize.x * 10.0f;
-            float timescaleSliderHeight = Manager::GetFontSize() / 2.0f;
-            float oldFontSize = ImGui::GetIO().Ctx->FontSize;
-            ImGui::GetIO().Ctx->FontSize = timescaleSliderHeight;
-
-            ImVec2 timescaleSliderPos = {playButtonPos.x + playButtonSize.x + Manager::GetFontSize() / 4.0f,
-                                         playButtonPos.y + (playButtonSize.y - timescaleSliderHeight) / 2.0f};
-            ImGui::SetCursorPos(timescaleSliderPos);
-
-            ImGui::SetNextItemWidth(playButtonSize.x * 10.0f);
-            ImGui::PushStyleColor(ImGuiCol_FrameBg, {0.12f, 0.12f, 0.12f, 1.00f});
-            ImGui::SliderFloat("##Timescale", &timescale.value().value->floating_point, 0.01f, 10.0f, "",
-                               ImGuiSliderFlags_Logarithmic);
-            ImGui::PopStyleColor(1);
-
-            ImGui::GetIO().Ctx->FontSize = oldFontSize;
-
-            ImGui::PushFont(Manager::GetTQFont());
-            ImVec2 timescalePos = {timescaleSliderPos.x + timescaleSliderWidth + Manager::GetFontSize() / 4.0f,
-                                   playButtonPos.y + playButtonSize.y / 2.0f - Manager::GetTQFontSize() / 2.0f};
-            ImGui::SetCursorPos(timescalePos);
-            ImGui::Text("%.3f", timescale.value().value->floating_point);
-            ImGui::PopFont();
-
-            const char* demoName = demoInfo.name.c_str();
-            ImVec2 demoNameSize = ImGui::CalcTextSize(demoName);
-            ImVec2 demoNamePos = {
-                barPos.x + barWidth - demoNameSize.x - Manager::GetIconsFontSize() / 8.0f,
-                playButtonPos.y + playButtonSize.y / 2.0f - Manager::GetFontSize() / 2.0f,
-            };
-            ImGui::SetCursorPos(demoNamePos);
-            ImGui::Text("%s", demoName);
-
-            // ImGui::PopFont();
+            Components::Playback::TogglePaused();
         }
-        ImGui::End();
 
-        return pos;
+        ImGui::PushFont(Manager::GetBoldFont());
+
+		char timescaleText[32] = {};
+		snprintf(timescaleText, sizeof(timescaleText), "%05.2f", timescale->value->floating_point);
+        ImVec2 timescalePos = {windowPadding + playButtonWidth + horizontalSpacing, windowPadding};
+        ImGui::SetCursorPos(timescalePos);
+        ImGui::Text(timescaleText);
+        ImVec2 timescaleSize = ImGui::CalcTextSize(timescaleText);
+
+        ImGui::PopFont();
+
+        ImVec2 barPos = {windowPadding + playButtonWidth + horizontalSpacing + timescaleSize.x + horizontalSpacing,
+                         windowPadding};
+        float barWidth = size.x - barPos.x - windowPadding;
+        ImGui::SetNextItemWidth(barWidth);
+        static std::int32_t tickValue = 0;
+        ImGui::SetCursorPos(barPos);
+
+        // Use frame padding to set the height of the slider
+        float remainingSliderHeight = (Manager::GetBoldFontSize() - Manager::GetFontSize()) / 2.0f;
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, {0.0f, remainingSliderHeight});
+        bool draggedProgressBar = ImGui::SliderInt("##Timeline", &tickValue, 0, demoInfo.endTick);
+        ImGui::PopStyleVar();
+
+		if (draggedProgressBar && !Components::Rewinding::IsRewinding())
+		{
+			Components::Playback::SmartSetTickDelta(tickValue - currentTick);
+		}
+		else
+		{
+			tickValue = currentTick;
+		}
+
+        ImGui::End();
     }
 }  // namespace IWXMVM::UI

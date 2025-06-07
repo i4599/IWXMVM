@@ -5,6 +5,8 @@ namespace IWXMVM::UI
 {
     namespace KeyframeEditor
     {
-        ImVec2 Render();
-    }  // namespace KeyframeEditor
+		void Show(bool* show);
+
+		void Initialize();
+	}  // namespace KeyframeEditor
 }  // namespace IWXMVM::UI

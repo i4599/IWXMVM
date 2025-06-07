@@ -5,6 +5,6 @@ namespace IWXMVM::UI
 {
     namespace ControlBar
     {
-        ImVec2 Render(ImVec2 keyframeManagerPos);
+        void Show(ImVec2 size, ImVec2 pos);
     }  // namespace ControlBar
 }  // namespace IWXMVM::UI

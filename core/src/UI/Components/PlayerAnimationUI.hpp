@@ -5,8 +5,7 @@ namespace IWXMVM::UI
 {
     namespace PlayerAnimationUI
     {
-        void Render();
-
-        bool* GetShowPtr() noexcept;
+        void Show();
+        const char* GetWindowName() noexcept;
     }  // namespace PlayerAnimationUI
 }  // namespace IWXMVM::UI

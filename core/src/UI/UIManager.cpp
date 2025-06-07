@@ -12,7 +12,7 @@
 #include "Input.hpp"
 #include "Utilities/MathUtils.hpp"
 #include "UI/Animations.hpp"
-#include "UI/Components/CameraSelection.hpp"
+#include "UI/Components/CameraMenu.hpp"
 #include "UI/Components/CaptureMenu.hpp"
 #include "UI/Components/ControlBar.hpp"
 #include "UI/Components/DemoLoader.hpp"
@@ -34,6 +34,7 @@ namespace IWXMVM::UI
     static bool isInitialized = false;
     static bool hideOverlay = false;
     static bool overlayHiddenThisFrame = false;
+    static bool dockBuilderInitialized = false;
     static ImVec2 windowSize;
     static ImVec2 simulatedMouse;
     static ImVec2 mousePosWhenHid;
@@ -74,7 +75,8 @@ namespace IWXMVM::UI
                 case WM_MOUSEMOVE:
                 case WM_NCMOUSEMOVE:
                 {
-                    ImVec2 mousePos = {static_cast<float>(GET_X_LPARAM(lParam)), static_cast<float>(GET_Y_LPARAM(lParam))};
+                    ImVec2 mousePos = {static_cast<float>(GET_X_LPARAM(lParam)),
+                                       static_cast<float>(GET_Y_LPARAM(lParam))};
                     ImVec2 middle = {windowSize.x / 2.0f, windowSize.y / 2.0f};
 
                     middle.y -= 12.0f;
@@ -157,6 +159,7 @@ namespace IWXMVM::UI
         style.TabRounding = 0.0f;
         style.DisplayWindowPadding = {100.0f, 100.0f};
 
+        /*
         style.Colors[ImGuiCol_Text] = {1.00f, 1.00f, 1.00f, 1.00f};
         style.Colors[ImGuiCol_TextDisabled] = {0.50f, 0.50f, 0.50f, 1.00f};
         style.Colors[ImGuiCol_WindowBg] = {0.04f, 0.04f, 0.04f, 1.00f};
@@ -210,6 +213,7 @@ namespace IWXMVM::UI
         style.Colors[ImGuiCol_NavWindowingHighlight] = {1.00f, 0.00f, 0.00f, 0.70f};
         style.Colors[ImGuiCol_NavWindowingDimBg] = {1.00f, 0.00f, 0.00f, 0.20f};
         style.Colors[ImGuiCol_ModalWindowDimBg] = {1.00f, 0.00f, 0.00f, 0.35f};
+        */
     }
 
     void Manager::Initialize(IDirect3DDevice9* device, HWND hwnd, ImVec2 size)
@@ -225,9 +229,8 @@ namespace IWXMVM::UI
             IMGUI_CHECKVERSION();
             ImGui::CreateContext();
 
-            // ImGui::StyleColorsDark();
-            // SetImGuiStyle();
             ImGui::Spectrum::StyleColorsSpectrum();
+            ImGui::GetStyle().GrabMinSize = Manager::GetFontSize() / 4.0f;
 
             LOG_DEBUG("Initializing ImGui_ImplWin32 with HWND {0:x}", (std::uintptr_t)hwnd);
             ImGui_ImplWin32_Init(hwnd);
@@ -241,6 +244,7 @@ namespace IWXMVM::UI
 
             ImGuiIO& io = ImGui::GetIO();
             io.IniFilename = NULL;
+            io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
             io.Fonts->ClearFonts();
             io.ConfigInputTrickleEventQueue = false;
 
@@ -274,7 +278,8 @@ namespace IWXMVM::UI
             };
 
             font = RegisterFont("NotoSans Regular", NOTOSANS_FONT_data, NOTOSANS_FONT_size, GetFontSize());
-            boldFont = RegisterFont("NotoSans Bold", NOTOSANS_BOLD_FONT_data, NOTOSANS_BOLD_FONT_size, GetBoldFontSize());
+            boldFont =
+                RegisterFont("NotoSans Bold", NOTOSANS_BOLD_FONT_data, NOTOSANS_BOLD_FONT_size, GetBoldFontSize());
             tqFont = RegisterFont("NotoSans Regular - TQ", NOTOSANS_FONT_data, NOTOSANS_FONT_size, GetTQFontSize());
             hFont = RegisterFont("NotoSans Regular - H", NOTOSANS_FONT_data, NOTOSANS_FONT_size, GetHFontSize());
 
@@ -284,8 +289,10 @@ namespace IWXMVM::UI
             TaskbarProgress::Initialize(hwnd);
 
             DemoLoader::Initialize();
+            KeyframeEditor::Initialize();
 
             isInitialized = true;
+            dockBuilderInitialized = false;
 
             LOG_INFO("Initialized UI");
         }
@@ -351,44 +358,148 @@ namespace IWXMVM::UI
                 }
             }
 
-            if (Input::KeyDown(InputConfiguration::Get().GetBoundKey(Action::PlaybackToggle)))
-            {
-                Components::Playback::TogglePaused();
-            }
-
             if (!opacityAnim.IsInvalid())
             {
                 ImGui::GetStyle().Alpha = opacityAnim.GetVal();
             }
 
-            if (ImGui::GetStyle().Alpha > 0.0f)
+            // Render interface
             {
-                Tabs::Add(ICON_FA_FILE_VIDEO, DemoLoader::GetShowPtr());
+                // Set up a couple variables for the layout of the whole UI
+                const float screenPadding = Manager::GetFontSize() * 0.5f;
 
-                if (Mod::GetGameInterface()->GetGameState() == Types::GameState::InDemo)
+                const ImVec2 timelineSize = {Manager::GetWindowSizeX() / 2.4f, Manager::GetBoldFontSize() * 2.0f};
+                const ImVec2 timelinePos = {(Manager::GetWindowSizeX() - timelineSize.x) / 2.0f,
+                                            Manager::GetWindowSizeY() - timelineSize.y - screenPadding};
+
+                static ImVec2 mainWndSize = {(Manager::GetWindowSizeX() - timelineSize.x) / 2.0f - screenPadding * 2.0f,
+                                             Manager::GetWindowSizeY() / 1.4f};
+                static ImVec2 mainWndPos = {timelinePos.x + timelineSize.x + screenPadding,
+                                            Manager::GetWindowSizeY() - mainWndSize.y - screenPadding};
+                const float minMainWndSizeY = Manager::GetFontSize() * 2.0f;
+                const float maxMainWndSizeY = Manager::GetWindowSizeY() - screenPadding * 2.0f;
+
+                static bool showSettings = true;
+                static bool showKeyframeEditor = false;
+
+                // This ensures that the timeline, keyframe editor, and tabs only get rendered inside of a demo
+				if (Mod::GetGameInterface()->GetGameState() == Types::GameState::InDemo)
+				{
+					const auto demoInfo = Mod::GetGameInterface()->GetDemoInfo();
+					const auto currentTick = Components::Playback::GetTimelineTick();
+
+					if (currentTick < demoInfo.endTick)
+					{
+						ControlBar::Show(timelineSize, timelinePos);
+
+						Tabs::RenderSettingsToggle(timelineSize, timelinePos, &showSettings);
+						Tabs::RenderKeyframeEditorToggle(timelineSize, timelinePos, &showKeyframeEditor);
+
+						KeyframeEditor::Show(&showKeyframeEditor);
+					}
+				}
+
+                if (Mod::GetGameInterface()->GetGameState() != Types::GameState::InDemo || showSettings)
                 {
-                    Tabs::Add(ICON_FA_SUN, VisualsMenu::GetShowPtr());
-                    Tabs::Add(ICON_FA_CIRCLE, CaptureMenu::GetShowPtr());
-                    Tabs::Add(ICON_FA_PERSON_FALLING, PlayerAnimationUI::GetShowPtr());
-                }
-                else
-                {
-                    *VisualsMenu::GetShowPtr() = false;
-                    *CaptureMenu::GetShowPtr() = false;
-                    *PlayerAnimationUI::GetShowPtr() = false;
+                    // Dock builder
+                    ImGuiID dockspaceID = ImGui::GetID("Main Dockspace");
+                    if (!dockBuilderInitialized)
+                    {
+                        dockBuilderInitialized = true;
+
+                        ImGui::DockBuilderRemoveNode(dockspaceID);
+                        ImGui::DockBuilderAddNode(dockspaceID, ImGuiDockNodeFlags_DockSpace);
+
+                        ImGui::DockBuilderDockWindow(VisualsMenu::GetWindowName(), dockspaceID);
+                        ImGui::DockBuilderDockWindow(CaptureMenu::GetWindowName(), dockspaceID);
+                        ImGui::DockBuilderDockWindow(CameraMenu::GetWindowName(), dockspaceID);
+                        ImGui::DockBuilderDockWindow(PlayerAnimationUI::GetWindowName(), dockspaceID);
+                        ImGui::DockBuilderDockWindow(DemoLoader::GetWindowName(), dockspaceID);
+
+                        ImGui::DockBuilderFinish(dockspaceID);
+                    }
+
+                    // Main window
+                    {
+                        // Resizing area & logic
+						const float resizeThickness = Manager::GetFontSize() * 0.4f;
+                        {
+                            const ImVec2 resizeTopLeft = mainWndPos;
+                            const ImVec2 resizeBotRight = {resizeTopLeft.x + mainWndSize.x,
+                                                           resizeTopLeft.y + resizeThickness};
+                            const ImVec2 mousePos = ImGui::GetMousePos();
+
+                            static bool currentlyResizing = false;
+                            bool hoveringResize = false;
+
+                            if (mousePos.x >= resizeTopLeft.x && mousePos.x <= resizeBotRight.x &&
+                                mousePos.y >= resizeTopLeft.y && mousePos.y <= resizeBotRight.y)
+                            {
+                                hoveringResize = true;
+                                if (ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+                                {
+                                    currentlyResizing = true;
+                                }
+                            }
+
+                            if (currentlyResizing && !ImGui::IsMouseDown(ImGuiMouseButton_Left))
+                            {
+                                currentlyResizing = false;
+                            }
+
+                            if (currentlyResizing)
+                            {
+                                const float deltaY = -ImGui::GetIO().MouseDelta.y;
+                                mainWndSize.y += deltaY;
+                                mainWndPos.y -= deltaY;
+
+                                mainWndSize.y = glm::clamp(mainWndSize.y, minMainWndSizeY, maxMainWndSizeY);
+                                mainWndPos.y = glm::clamp(mainWndPos.y, screenPadding,
+                                                          screenPadding + maxMainWndSizeY - minMainWndSizeY);
+                            }
+
+                            if (hoveringResize || currentlyResizing)
+                            {
+                                ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);
+                            }
+                        }
+
+                        ImGuiWindowFlags mainWindowFlags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar |
+                                                           ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
+                                                           ImGuiWindowFlags_NoDocking;
+                        ImGui::SetNextWindowSize(mainWndSize, ImGuiCond_Always);
+                        ImGui::SetNextWindowPos(mainWndPos, ImGuiCond_Always);
+                        ImGui::Begin("Main window", nullptr, mainWindowFlags);
+
+                        // Draw a line at the top as a visual cue that you can resize the window
+					    {
+                            ImDrawList* draw = ImGui::GetWindowDrawList();
+
+                            const ImVec2 p = mainWndPos;
+                            const float width = mainWndSize.x;
+
+                            const ImU32 col = ImGui::GetColorU32(ImGuiCol_CheckMark);
+                            const float thickness = 2.0f;
+                            draw->AddLine(ImVec2(p.x, p.y + thickness * 0.5f),
+                                          ImVec2(p.x + width, p.y + thickness * 0.5f), col, thickness);
+                        }
+
+                        ImGui::SetCursorPos({});
+                        ImGui::Dummy({mainWndSize.x, resizeThickness});
+
+                        ImGui::DockSpace(dockspaceID);
+                        ImGui::End();
+                    }
+
+                    VisualsMenu::Show();
+                    CaptureMenu::Show();
+                    CameraMenu::Show();
+                    PlayerAnimationUI::Show();
+                    DemoLoader::Show();
                 }
 
-                Tabs::Render();
-
-                CameraSelection::Render(ControlBar::Render(KeyframeEditor::Render()));
-                DemoLoader::Render();
-                VisualsMenu::Render();
-                CaptureMenu::Render();
-                PlayerAnimationUI::Render();
+				Notifications::Show();
             }
-
-            // Notifications should be displayed regardless of whether the UI is shown or not
-            Notifications::Render();
 
             Events::Invoke(EventType::OnFrame);
 

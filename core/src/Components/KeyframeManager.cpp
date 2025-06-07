@@ -421,7 +421,7 @@ namespace IWXMVM::Components
         }
 
         assert(p0Idx != -1 || p1Idx != -1);
-        assert(keyframes[p0Idx].tick < keyframes[p1Idx].tick);
+        assert(keyframes[p0Idx].tick <= keyframes[p1Idx].tick);
         assert(p0Idx != p1Idx);
 
         const auto& p0 = keyframes[p0Idx];

@@ -3,8 +3,9 @@
 
 namespace IWXMVM::UI
 {
-    namespace CameraSelection
+    namespace CameraMenu
     {
-        void Render(ImVec2 controlBarPos);
+        void Show();
+        const char* GetWindowName() noexcept;
     }  // namespace PlayerAnimationUI
 }  // namespace IWXMVM::UI

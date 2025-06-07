@@ -5,9 +5,8 @@ namespace IWXMVM::UI
 {
     namespace CaptureMenu
     {
-        void Render();
+        void Show();
+        const char* GetWindowName() noexcept;
         std::optional<std::int32_t> GetDisplayPassIndex();
-        
-        bool* GetShowPtr() noexcept;
     }  // namespace Tabs
 }  // namespace IWXMVM::UI

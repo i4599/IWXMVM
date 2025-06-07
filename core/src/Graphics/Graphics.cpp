@@ -164,12 +164,29 @@ namespace IWXMVM::GFX
         }
         pixelShaderBuffer->Release();
     }
+
     void GraphicsManager::DestroyDepthPassResources()
     {
-        depthPassPS->Release();
-        depthPassVS->Release();
-        depthPassVDecl->Release();
-        depthPassVertices->Release();
+        if (depthPassPS != nullptr)
+        {
+            depthPassPS->Release();
+            depthPassPS = nullptr;
+        }
+        if (depthPassVS != nullptr)
+        {
+            depthPassVS->Release();
+            depthPassVS = nullptr;
+        }
+        if (depthPassVDecl != nullptr)
+        {
+            depthPassVDecl->Release();
+            depthPassVDecl = nullptr;
+        }
+        if (depthPassVertices != nullptr)
+        {
+            depthPassVertices->Release();
+            depthPassVertices = nullptr;
+        }
     }
 
     void GraphicsManager::Initialize()

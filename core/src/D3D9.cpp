@@ -255,7 +255,7 @@ namespace IWXMVM::D3D9
 
     HRESULT __stdcall Reset_Hook(IDirect3DDevice9* pDevice, D3DPRESENT_PARAMETERS* pPresentationParameters)
     {
-        GFX::GraphicsManager::Get().Uninitialize();
+        // GFX::GraphicsManager::Get().Uninitialize();
 
         ImGui_ImplDX9_InvalidateDeviceObjects();
         HRESULT hr = Reset(pDevice, pPresentationParameters);
@@ -263,7 +263,7 @@ namespace IWXMVM::D3D9
 
         if (UI::Manager::IsInitialized())
         {
-            GFX::GraphicsManager::Get().Initialize();
+            // GFX::GraphicsManager::Get().Initialize();
         }
 
         return hr;
@@ -415,51 +415,5 @@ namespace IWXMVM::D3D9
     IDirect3DTexture9* GetDepthTexture()
     {
         return depthTexture;
-    }
-
-    bool CaptureBackBuffer(IDirect3DTexture9* texture)
-    {
-        auto device = GetDevice();
-
-        IDirect3DSurface9* RenderTarget = NULL;
-        auto result = device->GetRenderTarget(0, &RenderTarget);
-        if (FAILED(result))
-            return false;
-
-        IDirect3DSurface9* textureSurface;
-        result = texture->GetSurfaceLevel(0, &textureSurface);
-        if (FAILED(result))
-        {
-            textureSurface->Release();
-            RenderTarget->Release();
-            return false;
-        }
-
-        result = device->StretchRect(RenderTarget, NULL, textureSurface, NULL, D3DTEXF_LINEAR);
-        if (FAILED(result))
-        {
-            textureSurface->Release();
-            RenderTarget->Release();
-            return false;
-        }
-
-        textureSurface->Release();
-        RenderTarget->Release();
-        return true;
-    }
-
-    bool CreateTexture(IDirect3DTexture9*& texture, ImVec2 size)
-    {
-        if (texture != NULL)
-            texture->Release();
-
-        auto device = D3D9::GetDevice();
-
-        auto result = D3DXCreateTexture(device, (UINT)size.x, (UINT)size.y, D3DX_DEFAULT, D3DUSAGE_RENDERTARGET,
-                                        D3DFMT_X8R8G8B8, D3DPOOL_DEFAULT, &texture);
-        if (FAILED(result))
-            return false;
-
-        return true;
     }
 }  // namespace IWXMVM::D3D9

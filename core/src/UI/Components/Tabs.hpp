@@ -5,7 +5,10 @@ namespace IWXMVM::UI
 {
     namespace Tabs
     {
-        void Add(const char* icon, bool* show) noexcept;
-        void Render();
+        // The keyframe editor toggle is to the left of the settings toggle
+        void RenderKeyframeEditorToggle(ImVec2 timelineSize, ImVec2 timelinePos, bool* show);
+
+        // The settings toggle is to the left of the timeline
+        void RenderSettingsToggle(ImVec2 timelineSize, ImVec2 timelinePos, bool* show);
     }  // namespace Tabs
 }  // namespace IWXMVM::UI

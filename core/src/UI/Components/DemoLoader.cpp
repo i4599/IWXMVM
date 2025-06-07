@@ -56,10 +56,6 @@ namespace IWXMVM::UI
 
     static std::filesystem::path playingDemoPath;  // Path of last played demo
 
-    static Animation gradientPos;
-
-    static bool show = true;
-
     template <bool caseSensitive, typename T>
         requires std::is_same_v<T, std::string_view> || std::is_same_v<T, std::wstring_view>
     static bool CompareNaturally(const T lhs, const T rhs)
@@ -272,48 +268,6 @@ namespace IWXMVM::UI
             ImGui::ColorConvertFloat4ToU32(color), 0.0f, ImDrawFlags_Closed);
     }
 
-    static void DrawGradientHorizontal(ImVec2 topLeft, ImVec2 bottomRight, ImVec4 color)
-    {
-        ImGuiIO& io = ImGui::GetIO();
-        ImDrawList* drawList = ImGui::GetWindowDrawList();
-        ImVec2 windowPos = ImGui::GetCurrentWindow()->Pos;
-        ImVec2 scroll = ImGui::GetCurrentWindow()->Scroll;
-
-        ImVec2 pMin = {windowPos.x + topLeft.x - scroll.x, windowPos.y + topLeft.y - scroll.y};
-        ImVec2 pMax = {windowPos.x + bottomRight.x - scroll.x, windowPos.y + bottomRight.y - scroll.y};
-
-        drawList->PrimReserve(6, 4);
-
-        auto* _IdxWritePtr = drawList->_IdxWritePtr;
-        auto* _VtxWritePtr = drawList->_VtxWritePtr;
-        ImU32 colU32 = ImGui::ColorConvertFloat4ToU32({color.x, color.y, color.z, color.w * ImGui::GetStyle().Alpha});
-        ImU32 colTransparentU32 = ImGui::ColorConvertFloat4ToU32({color.x, color.y, color.z, 0.0f});
-        ImVec2 b(pMax.x, pMin.y), d(pMin.x, pMax.y), uv(drawList->_Data->TexUvWhitePixel);
-        ImDrawIdx idx = (ImDrawIdx)drawList->_VtxCurrentIdx;
-        _IdxWritePtr[0] = idx;
-        _IdxWritePtr[1] = (ImDrawIdx)(idx + 1);
-        _IdxWritePtr[2] = (ImDrawIdx)(idx + 2);
-        _IdxWritePtr[3] = idx;
-        _IdxWritePtr[4] = (ImDrawIdx)(idx + 2);
-        _IdxWritePtr[5] = (ImDrawIdx)(idx + 3);
-        _VtxWritePtr[0].pos = pMin;
-        _VtxWritePtr[0].uv = uv;
-        _VtxWritePtr[0].col = colU32;
-        _VtxWritePtr[1].pos = b;
-        _VtxWritePtr[1].uv = uv;
-        _VtxWritePtr[1].col = colTransparentU32;
-        _VtxWritePtr[2].pos = pMax;
-        _VtxWritePtr[2].uv = uv;
-        _VtxWritePtr[2].col = colTransparentU32;
-        _VtxWritePtr[3].pos = d;
-        _VtxWritePtr[3].uv = uv;
-        _VtxWritePtr[3].col = colU32;
-
-        drawList->_VtxWritePtr += 4;
-        drawList->_VtxCurrentIdx += 4;
-        drawList->_IdxWritePtr += 6;
-    }
-
     static float Interp(float a, float b, float t)
     {
         float new_t = powf(sinf(t * glm::pi<float>() / 2.0f), 0.7f);
@@ -344,25 +298,16 @@ namespace IWXMVM::UI
                     isThePlayingDemo = true;
                 }
 
-                ImGui::SetCursorPosX(ImGui::GetCursorPosX() + Manager::GetFontSize() / 7.0f);
-
-                ImVec2 iconCursorPos = ImGui::GetCursorPos();
-
-                if (!isThePlayingDemo)
-                {
-                    ImGui::Text(ICON_FA_FILE_VIDEO);
-                    ImGui::SameLine();
-                }
-                else
-                {
-                    ImVec2 iconSize = ImGui::CalcTextSize(ICON_FA_FILE_VIDEO);
-                    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + iconSize.x);
-                }
-
                 const auto demoName = demos[i].path.filename().string();
+                const char* demoPrefix = " " ICON_FA_FILE_VIDEO " ";
+                const std::size_t demoNameOffset = std::strlen(demoPrefix);
+
+                char demoNameWithIcon[256] = {};
+                strcpy_s(demoNameWithIcon, sizeof(demoNameWithIcon), demoPrefix);
+				strcpy_s(demoNameWithIcon + demoNameOffset, sizeof(demoNameWithIcon) - demoNameOffset, demoName.c_str());
+
                 ImVec2 textCursorPos = {ImGui::GetCursorPosX() + Manager::GetFontSize() / 12.0f,
                                         ImGui::GetCursorPosY()};
-                ImGui::SetCursorPos(textCursorPos);
 
                 if (!demos[i].anim.IsInvalid())
                 {
@@ -373,7 +318,7 @@ namespace IWXMVM::UI
                 if (isThePlayingDemo)
                     ImGui::PushStyleColor(ImGuiCol_Text, {1.0f, 1.0f, 1.0f, 1.0f - (1.0f / 2.5f)});
 
-                ImGui::Text("%s", demoName.c_str());
+                ImGui::Text("%s", demoNameWithIcon);
 
                 if (isThePlayingDemo)
                     ImGui::PopStyleColor(1);
@@ -381,30 +326,11 @@ namespace IWXMVM::UI
                 if (!demos[i].anim.IsInvalid())
                     ImGui::PopStyleColor(1);
 
-                ImVec2 textSize = ImGui::CalcTextSize(demoName.c_str());
+                ImVec2 textSize = ImGui::CalcTextSize(demoNameWithIcon);
 
                 if (isThePlayingDemo)
                 {
                     demos[i].anim.Invalidate();
-
-                    ImVec2 oldCursorPos = ImGui::GetCursorPos();
-
-                    ImGui::SetCursorPos({iconCursorPos.x, iconCursorPos.y});
-                    ImGui::PushStyleColor(ImGuiCol_Text, {1.0f, 0.4f, 0.4f, 1.0f});
-                    ImGui::Text(ICON_FA_CIRCLE);
-                    ImGui::PopStyleColor();
-
-                    ImGui::SetCursorPos(oldCursorPos);
-
-                    if (!gradientPos.IsInvalid())
-                    {
-                        static float a = 0.0f;
-                        a += ImGui::GetIO().DeltaTime;
-                        a = std::fmod(a, glm::pi<float>());
-                        DrawGradientHorizontal({0.0f, ImGui::GetCursorPosY() - Manager::GetFontSize()},
-                                               {gradientPos.GetVal(), ImGui::GetCursorPosY()},
-                                               {1.0f, 1.0f, 1.0f, 0.75f * (glm::abs(glm::sin(a)) + 2.0f) / 3.0f});
-                    }
                 }
 
                 const float cursorPosAfterText = ImGui::GetCursorPosX();
@@ -424,21 +350,10 @@ namespace IWXMVM::UI
                             demos[i].anim.GoForward();
                     }
 
-                    if (ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+                    if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !isThePlayingDemo)
                     {
-                        if (!isThePlayingDemo)
-                        {
-                            Mod::GetGameInterface()->PlayDemo(demos[i].path);
-
-                            playingDemoPath = demos[i].path;
-
-                            gradientPos.Invalidate();
-                            gradientPos = Animation::Create(1.2f, 0.0f, cursorPosAfterText, GradientInterp);
-                        }
-                        else
-                        {
-                            Mod::GetGameInterface()->Disconnect();
-                        }
+						Mod::GetGameInterface()->PlayDemo(demos[i].path);
+						playingDemoPath = demos[i].path;
                     }
                 }
                 else if (!demos[i].anim.IsInvalid())
@@ -611,100 +526,83 @@ namespace IWXMVM::UI
         Refresh();
     }
 
-    void DemoLoader::Render()
+    void DemoLoader::Show()
     {
-        if (!show)
+        ImGui::Begin(GetWindowName(), nullptr, ImGuiWindowFlags_NoCollapse);
+
+        ImVec2 size = ImGui::GetWindowSize();
+
+        // Refresh button
         {
-            return;
+            if (ImGui::Button(ICON_FA_REPEAT " Refresh"))
+            {
+				Refresh();
+				ImGui::End();
+				return;
+            }
         }
 
-        ImGui::PushStyleVar(ImGuiStyleVar_IndentSpacing, Manager::GetFontSize());
+        ImGui::SameLine();
 
-        float width = (float)Manager::GetWindowSizeX() / 5.0f;
-        float height = (float)Manager::GetWindowSizeY() / 1.7f;
-        ImVec2 size = {width, height};
-        ImGui::SetNextWindowSize(size, ImGuiCond_Once);
-
-        float X = (float)Manager::GetWindowSizeX() / 1.4f - width / 2.0f;
-        float Y = (float)Manager::GetWindowSizeY() / 2.0f - height / 2.0f;
-        ImVec2 pos = {X, Y};
-        ImGui::SetNextWindowPos(pos, ImGuiCond_Once);
-
-        ImGuiWindowFlags flags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse |
-                                 ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar;
-
-        if (ImGui::Begin("Demos", nullptr, flags))
+        // Disconnect button
         {
-            size = ImGui::GetWindowSize();
-            pos = ImGui::GetWindowPos();
-
-            // Search bar
+            if (ImGui::Button(ICON_FA_CIRCLE " Disconnect"))
             {
-                float windowGap = Manager::GetFontSize() * 1.2f;
-                ImGui::SetCursorPos({windowGap, windowGap * 0.6f});
-                ImGui::Text(ICON_FA_MAGNIFYING_GLASS);
-                ImVec2 iconSize = ImGui::CalcTextSize(ICON_FA_MAGNIFYING_GLASS);
-                ImGui::SameLine(windowGap + iconSize.x + Manager::GetFontSize() * 0.2f);
-                ImGui::SetNextItemWidth(size.x - windowGap - ImGui::GetCursorPosX());
-                ImGui::InputTextWithHint(
-                    "##SearchInput", "Search...", &searchBarText[0], searchBarText.capacity() + 1,
-                    ImGuiInputTextFlags_CallbackResize,
-                    [](ImGuiInputTextCallbackData* data) -> int {
-                        if (data->EventFlag == ImGuiInputTextFlags_CallbackResize)
-                        {
-                            std::string* str = reinterpret_cast<std::string*>(data->UserData);
-                            str->resize(data->BufTextLen);
-                            data->Buf = &(*str)[0];
-                        }
-                        return 0;
-                    },
-                    &searchBarText);
-
-                if (lastSearchBarText != searchBarText)
-                {
-                    RecacheSearchBarTextSplit();
-                    cachedfilteredDemos.clear();
-                    totalCachedFilteredDemosCount = 0;
-                    lastSearchBarText = searchBarText;
-                }
-            }
-
-            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + Manager::GetFontSize() * 0.2f);
-
-            float vertOffset = ImGui::GetCursorPosY();
-
-            ImVec2 refreshButtonPos = {0.0f, size.y - Manager::GetFontSize() * 1.6f};
-            ImVec2 refreshButtonSize = {size.x, size.y - refreshButtonPos.y};
-
-            ImGuiWindowFlags childWindowFlags =
-                ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar;
-            ImGui::BeginChild("Demos_Window", {size.x, size.y - refreshButtonSize.y - vertOffset}, 0, childWindowFlags);
-
-            if (!isScanningDemoPaths.load())
-            {
-                ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, {Manager::GetFontSize() * 0.1f, 0.0f});
-                RenderSearchPaths();
-                ImGui::PopStyleVar();
-            }
-
-            ImGui::EndChild();
-
-            ImGui::SetCursorPos(refreshButtonPos);
-            if (ImGui::Button("Refresh", refreshButtonSize))
-            {
-                Refresh();
-                ImGui::End();
-                ImGui::PopStyleVar();
-                return;
+                Mod::GetGameInterface()->Disconnect();
             }
         }
+
+        // Search bar
+        {
+            ImGui::Text(ICON_FA_MAGNIFYING_GLASS);
+            ImGui::SameLine();
+            ImGui::InputTextWithHint(
+                "##SearchInput", "Search...", &searchBarText[0], searchBarText.capacity() + 1,
+                ImGuiInputTextFlags_CallbackResize,
+                [](ImGuiInputTextCallbackData* data) -> int {
+                    if (data->EventFlag == ImGuiInputTextFlags_CallbackResize)
+                    {
+                        std::string* str = reinterpret_cast<std::string*>(data->UserData);
+                        str->resize(data->BufTextLen);
+                        data->Buf = &(*str)[0];
+                    }
+                    return 0;
+                },
+                &searchBarText);
+
+            if (lastSearchBarText != searchBarText)
+            {
+                RecacheSearchBarTextSplit();
+                cachedfilteredDemos.clear();
+                totalCachedFilteredDemosCount = 0;
+                lastSearchBarText = searchBarText;
+            }
+        }
+
+        ImGuiWindowFlags childWindowFlags =
+            ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar;
+        ImGui::BeginChild("Demos_Window", {}, 0, childWindowFlags);
+
+        if (!isScanningDemoPaths.load())
+        {
+            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, {Manager::GetFontSize() * 0.1f, 0.0f});
+            RenderSearchPaths();
+            ImGui::PopStyleVar();
+        }
+        else
+        {
+            ImGui::BeginDisabled();
+            ImGui::Text("Loading...");
+            ImGui::EndDisabled();
+        }
+
+        ImGui::EndChild();
+
         ImGui::End();
-
-        ImGui::PopStyleVar();
     }
 
-    bool* DemoLoader::GetShowPtr() noexcept
+    const char* DemoLoader::GetWindowName() noexcept
     {
-        return &show;
+        return "Demos";
     }
 }  // namespace IWXMVM::UI
